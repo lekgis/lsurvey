@@ -9,7 +9,8 @@
 
     <meta name="theme-color" content="#2563eb">
     <title>สำรวจโนนไทย</title>
-    <link rel="icon" href="lb.ico" type="image/x-icon">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="static/icons/lb.ico" type="image/x-icon"> <!-- แก้เป็นพาธสัมพัทธ์ -->
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -63,6 +64,7 @@
             color: #dc2626; /* สีแดง */
             margin-bottom: 0.2rem; /* เพิ่มระยะห่าง */
             display: block;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8); /* เงาสีขาว */
         }
         .form-input { 
             width: 100%; 
@@ -1290,10 +1292,30 @@
             lucide.createIcons();
             loadExistingData();
         };
+        // ลงทะเบียน Service Worker
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+              .then(reg => console.log('Service Worker registered', reg))
+              .catch(err => console.log('Service Worker registration failed', err));
+          });
+        }
+          
+        // แจ้งเตือนให้ติดตั้งแอป (ตัวอย่าง)
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          window.deferredPrompt = e;
+            
+          // สร้างปุ่มแนะนำให้ติดตั้ง (ปรับตามความต้องการ)
+          setTimeout(() => {
+            if (confirm('ติดตั้งแอปสำรวจโนนไทยลงหน้าจอหลักเพื่อใช้งานแบบเต็มหน้าจอ?')) {
+              window.deferredPrompt.prompt();
+              window.deferredPrompt.userChoice.then(() => {
+                window.deferredPrompt = null;
+              });
+            }
+          }, 3000);
+        });
     </script>
 </body>
-
 </html>
-
-
-

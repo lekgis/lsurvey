@@ -110,19 +110,28 @@
         #settings-menu button:hover {
           transform: translateY(0) scale(1.05) !important;
         }
-        /* ========== แอนิเมชันเลื่อนขึ้น/ลงสำหรับเป้าเล็งและปุ่มบวก ========== */
-        #crosshair,
-        #add-trigger-container {
-          transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
-                      opacity 0.3s ease;
-          transform: translateY(100vh); /* เริ่มจากด้านล่างสุดของหน้าจอ */
+        /* ========== แอนิเมชันเลื่อนขึ้น/ลง + ศูนย์กลางสำหรับเป้าเล็งและปุ่มบวก ========== */
+        #crosshair {
+          transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                      opacity 0.6s ease;
+          transform: translate(-50%, -50%) translateY(100vh); /* รวมศูนย์กลาง + เลื่อนจากล่าง */
           opacity: 0;
           will-change: transform, opacity;
         }
+        #crosshair.visible {
+          transform: translate(-50%, -50%) translateY(0); /* ศูนย์กลาง + ตำแหน่งปกติ */
+          opacity: 1;
+        }
 
-        #crosshair.visible,
+        #add-trigger-container {
+          transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                      opacity 0.6s ease;
+          transform: translateX(-50%) translateY(100vh); /* รวมศูนย์กลาง + เลื่อนจากล่าง */
+          opacity: 0;
+          will-change: transform, opacity;
+        }
         #add-trigger-container.visible {
-          transform: translateY(0);
+          transform: translateX(-50%) translateY(0); /* ศูนย์กลาง + ตำแหน่งปกติ */
           opacity: 1;
         }
 

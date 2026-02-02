@@ -391,43 +391,44 @@
         </button>
     </div>
 
-    <!-- ปุ่มฟันเฟืองและรีเฟรช (ด้านบนซ้าย) -->
-    <div class="absolute top-4 left-4 z-[1001] flex flex-row gap-2">
-      <!-- ปุ่มฟันเฟือง (เมนูหลัก) -->
-      <button id="btn-settings" onclick="toggleSettingsMenu()" class="map-btn p-3 text-gray-600 hover:text-blue-600 transition-all relative group">
-        <i data-lucide="settings-2" id="settings-icon" class="w-6 h-6"></i>
-        <!-- จุดแจ้งเตือน -->
-        <span id="settings-badge" class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full hidden"></span>
-      </button>
-      
-      <!-- ปุ่มรีเฟรช -->
-      <button id="btn-refresh" onclick="refreshData()" class="map-btn p-3 text-blue-600 transition-all">
-        <i data-lucide="refresh-cw" id="refresh-icon" class="w-6 h-6"></i>
-      </button>
-      
-      <!-- ปุ่มย่อยที่เลื่อนลงมา -->
-      <div id="settings-menu" class="mt-2 space-y-2 hidden">
-        <!-- ปุ่ม 1: ส่งออกแผนที่สิ่งปลูกสร้าง -->
-        <button onclick="exportBuildingGeoJSON()" class="map-btn p-3 w-full bg-gradient-to-r from-orange-400 to-orange-600 text-white hover:scale-105 transition-all shadow-lg">
-          <i data-lucide="home" class="w-5 h-5"></i>
-        </button>
-        
-        <!-- ปุ่ม 2: ส่งออกแผนที่ป้าย -->
-        <button onclick="exportSignGeoJSON()" class="map-btn p-3 w-full bg-gradient-to-r from-green-400 to-green-600 text-white hover:scale-105 transition-all shadow-lg">
-          <i data-lucide="map-pin" class="w-5 h-5"></i>
-        </button>
-        
-        <!-- ปุ่ม 3: โหลดรูปสิ่งปลูกสร้าง -->
-        <button onclick="loadBuildingImages()" class="map-btn p-3 w-full bg-gradient-to-r from-blue-400 to-blue-600 text-white hover:scale-105 transition-all shadow-lg">
-          <i data-lucide="image" class="w-5 h-5"></i>
-        </button>
-        
-        <!-- ปุ่ม 4: โหลดรูปป้าย -->
-        <button onclick="loadSignImages()" class="map-btn p-3 w-full bg-gradient-to-r from-purple-400 to-purple-600 text-white hover:scale-105 transition-all shadow-lg">
-          <i data-lucide="gallery-horizontal" class="w-5 h-5"></i>
-        </button>
-      </div>
-    </div>
+        <!-- ปุ่มฟันเฟืองและรีเฟรช (ด้านบนซ้าย) -->
+        <div class="absolute top-4 left-4 z-[1001]">
+          <!-- ปุ่มฟันเฟือง (เมนูหลัก) -->
+          <button id="btn-settings" onclick="toggleSettingsMenu()" class="map-btn p-3 text-gray-600 hover:text-blue-600 transition-all relative group mb-2">
+            <i data-lucide="settings-2" id="settings-icon" class="w-6 h-6"></i>
+            <!-- จุดแจ้งเตือน -->
+            <span id="settings-badge" class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full hidden"></span>
+          </button>
+          
+          <!-- ปุ่มรีเฟรช -->
+          <button id="btn-refresh" onclick="refreshData()" class="map-btn p-3 text-blue-600 transition-all">
+            <i data-lucide="refresh-cw" id="refresh-icon" class="w-6 h-6"></i>
+          </button>
+          
+          <!-- ปุ่มย่อยที่เลื่อนลงมา -->
+          <div id="settings-menu" class="mt-2 space-y-2 hidden">
+            <!-- ปุ่ม 1: ดาวน์โหลดสิ่งปลูกสร้าง -->
+            <button onclick="exportBuildingGeoJSON()" class="map-btn p-3 w-48 bg-gradient-to-r from-orange-400 to-orange-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
+              <i data-lucide="home" class="w-5 h-5"></i>
+              <span class="text-xs font-bold">ดาวน์โหลดสิ่งปลูกสร้าง</span>
+            </button>
+            <!-- ปุ่ม 2: ดาวน์โหลดป้าย -->
+            <button onclick="exportSignGeoJSON()" class="map-btn p-3 w-48 bg-gradient-to-r from-green-400 to-green-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
+              <i data-lucide="map-pin" class="w-5 h-5"></i>
+              <span class="text-xs font-bold">ดาวน์โหลดป้าย</span>
+            </button>
+            <!-- ปุ่ม 3: ดาวน์โหลดรูปสิ่งปลูกสร้าง -->
+            <button onclick="loadBuildingImages()" class="map-btn p-3 w-48 bg-gradient-to-r from-blue-400 to-blue-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
+              <i data-lucide="image" class="w-5 h-5"></i>
+              <span class="text-xs font-bold">ดาวน์โหลดรูปสิ่งปลูกสร้าง</span>
+            </button>
+            <!-- ปุ่ม 4: ดาวน์โหลดรูปป้าย -->
+            <button onclick="loadSignImages()" class="map-btn p-3 w-48 bg-gradient-to-r from-purple-400 to-purple-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
+              <i data-lucide="gallery-horizontal" class="w-5 h-5"></i>
+              <span class="text-xs font-bold">ดาวน์โหลดรูปป้าย</span>
+            </button>
+          </div>
+        </div>
 
     <!-- ปุ่มเลือกประเภทและแก้ไข -->
     <div class="absolute top-4 right-4 z-[1001] flex flex-row gap-2">

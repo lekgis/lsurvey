@@ -164,10 +164,11 @@
         .data-table-panel {
             position: fixed;
             bottom: 20px;
-            left: 20px; /* เปลี่ยนจาก right: 20px เป็น left: 20px */
+            left: 20px;
             width: 90%;
             max-width: 900px;
-            max-height: 60vh;
+            max-height: 47vh; /* ✅ เปลี่ยนจาก 60vh เป็น 47vh */
+            height: 47vh; /* ✅ เพิ่มบรรทัดนี้เพื่อให้ความสูงคงที่ 47% */
             background: white;
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
@@ -182,11 +183,15 @@
             display: flex;
             transform: translateY(0);
         }
+        .data-table-panel.open {
+            display: flex;
+            transform: translateY(0);
+        }
         .table-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1.2rem 0.0rem;
-            min-height: 24px;       /* กำหนดความสูงต่ำสุดให้เล็กลง */
+            padding: 0.1rem 0.0rem;
+            min-height: 20px;       /* กำหนดความสูงต่ำสุดให้เล็กลง */
             gap: 0.25rem;    
             display: flex;
             justify-content: space-between;
@@ -225,7 +230,7 @@
         }
         .data-table th {
             background: #f3f4f6;
-            padding: 10px 8px;
+            padding: 6px 8px;
             text-align: left;
             font-weight: 700;
             color: #374151;
@@ -235,7 +240,7 @@
             z-index: 1;
         }
         .data-table td {
-            padding: 8px;
+            padding: 4px;
             border-bottom: 1px solid #e5e7eb;
             vertical-align: middle;
         }

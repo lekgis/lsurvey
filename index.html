@@ -1914,18 +1914,6 @@
               map.on('zoomend', updateVisibleMarkers);
               updateVisibleMarkers(); // แสดงมาร์กเกอร์ในมุมมองทันที
               
-              // แสดงข้อความแจ้งเตือน
-              if (!document.getElementById('optimize-notice')) {
-                const notice = document.createElement('div');
-                notice.id = 'optimize-notice';
-                notice.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-[2000] animate-fade-in text-sm';
-                notice.innerHTML = `💡 แสดงเฉพาะจุดในมุมมอง (${totalMarkers} จุด)`;
-                document.body.appendChild(notice);
-                setTimeout(() => {
-                  notice.classList.add('animate-fade-out');
-                  setTimeout(() => notice.remove(), 300);
-                }, 5000);
-              }
             } else {
               // โหมดข้อมูลน้อย: แสดงมาร์กเกอร์ทั้งหมด
               allBuildings.forEach(r => {

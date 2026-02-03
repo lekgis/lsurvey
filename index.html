@@ -590,11 +590,31 @@
         let allSigns = [];
 
         function initMap() {
-            map = L.map('map', { zoomControl: false, attributionControl: false }).setView([15.234, 102.054], 16);
-            L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-                maxZoom: 22, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-            }).addTo(map);
-            surveyLayers.addTo(map);
+          map = L.map('map', { 
+            zoomControl: false, 
+            attributionControl: false,
+            preferCanvas: true // ✅ เปิดใช้งาน Canvas Rendering
+          }).setView([15.234, 102.054], 16);
+          
+          L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 22,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            updateWhenIdle: isMobile(), // โหลดไทล์เฉพาะเมื่อหยุดเลื่อน (มือถือ)
+            updateWhenZooming: false,
+            keepBuffer: 2 // เก็บไทล์รอบๆ เพิ่มอีก 2 ชั้น
+          }).addTo(map);
+          
+          surveyLayers.addTo(map);
+          
+          // ปรับแต่งเฉพาะมือถือ
+          if (isMobile()) {
+            // จำกัดซูมสูงสุดเพื่อลดการโหลดไทล์ความละเอียดสูง
+            map._limitZoom = () => Math.min(19, map.getMaxZoom());
+          }
+        }
+        // ตรวจจับอุปกรณ์มือถือ
+        function isMobile() {
+          return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
 
         function activateTool(tool) {
@@ -1759,6 +1779,80 @@
             setTimeout(() => notification.remove(), 300);
           }, 3000);
         }
+        /**
+         * แสดงมาร์กเกอร์ทั้งหมด (สำหรับข้อมูลน้อย)
+         */
+        function renderAllMarkers() {
+          allBuildings.forEach(r => {
+            if (!r.lat_long) return;
+            const coords = r.lat_long.split(',').map(Number);
+            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+            setupMarkerPopup(m, r, 'building');
+            m.addTo(surveyLayers);
+            if (isEditMode) enableMarkerDragging(m, r);
+          });
+          
+          allSigns.forEach(r => {
+            if (!r.lat_long) return;
+            const coords = r.lat_long.split(',').map(Number);
+            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+            setupMarkerPopup(m, r, 'sign');
+            m.addTo(surveyLayers);
+            if (isEditMode) enableMarkerDragging(m, r);
+          });
+        }
+
+        /**
+         * อัปเดตมาร์กเกอร์เฉพาะในมุมมองปัจจุบัน (สำหรับข้อมูลจำนวนมาก)
+         */
+        function updateVisibleMarkers() {
+          surveyLayers.clearLayers();
+          const bounds = map.getBounds();
+          
+          // แสดงเฉพาะสิ่งปลูกสร้างในมุมมอง
+          allBuildings.forEach(r => {
+            if (!r.lat_long) return;
+            const coords = r.lat_long.split(',').map(Number);
+            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+            const latLng = L.latLng(coords[0], coords[1]);
+            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
+            
+            const m = createCircleMarker(latLng, 'building', isEditMode);
+            setupMarkerPopup(m, r, 'building');
+            m.addTo(surveyLayers);
+            if (isEditMode) enableMarkerDragging(m, r);
+          });
+          
+          // แสดงเฉพาะป้ายในมุมมอง
+          allSigns.forEach(r => {
+            if (!r.lat_long) return;
+            const coords = r.lat_long.split(',').map(Number);
+            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+            const latLng = L.latLng(coords[0], coords[1]);
+            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
+            
+            const m = createCircleMarker(latLng, 'sign', isEditMode);
+            setupMarkerPopup(m, r, 'sign');
+            m.addTo(surveyLayers);
+            if (isEditMode) enableMarkerDragging(m, r);
+          });
+        }
+
+        /**
+         * เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
+         */
+        function enableMarkerDragging(marker, data) {
+          if (!isEditMode) return;
+          marker.dragging.enable();
+          marker.on('dragend', async (e) => {
+            const newLatLng = e.target.getLatLng();
+            const marker = e.target;
+            const data = marker._popupData;
+            if (data) await updateMarkerPosition(marker, data, newLatLng);
+          });
+        }
         // ฟังก์ชันสร้างแถวข้อมูลป้าย
         function renderSignTable() {
             const tbody = document.getElementById('sign-table-body');
@@ -1795,68 +1889,68 @@
         }
 
         async function loadExistingData() {
-            try {
-                const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
-                const data = await res.json();
-                surveyLayers.clearLayers();
-                
-                // เก็บข้อมูลไว้สำหรับตาราง
-                allBuildings = data.buildings || [];
-                allSigns = data.signs || [];
-                
-                // แสดงข้อมูลในตาราง
-                renderBuildingTable();
-                renderSignTable();
-                
-                // สร้าง marker บนแผนที่
-                if(allBuildings) allBuildings.forEach(r => {
-                    if (!r.lat_long) return;
-                    const [lat, lng] = r.lat_long.split(',').map(Number);
-                    if (isNaN(lat) || isNaN(lng)) return;
-                    // ✅ ส่ง isEditMode เป็นพารามิเตอร์ที่ 3
-                    const m = createCircleMarker([lat, lng], 'building', isEditMode);
-                    setupMarkerPopup(m, r, 'building');
-                    m.addTo(surveyLayers);
-                    
-                    // ✅ เปิดการลากถ้าอยู่ในโหมดแก้ไข
-                    if (isEditMode) {
-                        m.dragging.enable();
-                        m.on('dragend', async (e) => {
-                            const newLatLng = e.target.getLatLng();
-                            const marker = e.target;
-                            const data = marker._popupData;
-                            if (data) {
-                                await updateMarkerPosition(marker, data, newLatLng);
-                            }
-                        });
-                    }
-                });
-                
-                if(allSigns) allSigns.forEach(r => {
-                    if (!r.lat_long) return;
-                    const [lat, lng] = r.lat_long.split(',').map(Number);
-                    if (isNaN(lat) || isNaN(lng)) return;
-                    // ✅ ส่ง isEditMode เป็นพารามิเตอร์ที่ 3
-                    const m = createCircleMarker([lat, lng], 'sign', isEditMode);
-                    setupMarkerPopup(m, r, 'sign');
-                    m.addTo(surveyLayers);
-                    
-                    // ✅ เปิดการลากถ้าอยู่ในโหมดแก้ไข
-                    if (isEditMode) {
-                        m.dragging.enable();
-                        m.on('dragend', async (e) => {
-                            const newLatLng = e.target.getLatLng();
-                            const marker = e.target;
-                            const data = marker._popupData;
-                            if (data) {
-                                await updateMarkerPosition(marker, data, newLatLng);
-                            }
-                        });
-                    }
-                });
-            } catch(e) {
-                console.error("Error loading data:", e);
+          try {
+            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
+            const data = await res.json();
+            surveyLayers.clearLayers();
+            
+            // เก็บข้อมูลไว้สำหรับตาราง
+            allBuildings = data.buildings || [];
+            allSigns = data.signs || [];
+            
+            // แสดงข้อมูลในตาราง
+            renderBuildingTable();
+            renderSignTable();
+            
+            // ✅ สร้าง marker บนแผนที่ด้วยระบบกรองตามจำนวนข้อมูล
+            const totalMarkers = allBuildings.length + allSigns.length;
+            const useOptimizedRendering = totalMarkers > 200;
+
+            if (useOptimizedRendering) {
+              // โหมดข้อมูลจำนวนมาก: แสดงเฉพาะมาร์กเกอร์ในมุมมอง
+              map.off('moveend', updateVisibleMarkers);
+              map.off('zoomend', updateVisibleMarkers);
+              map.on('moveend', updateVisibleMarkers);
+              map.on('zoomend', updateVisibleMarkers);
+              updateVisibleMarkers(); // แสดงมาร์กเกอร์ในมุมมองทันที
+              
+              // แสดงข้อความแจ้งเตือน
+              if (!document.getElementById('optimize-notice')) {
+                const notice = document.createElement('div');
+                notice.id = 'optimize-notice';
+                notice.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-[2000] animate-fade-in text-sm';
+                notice.innerHTML = `💡 แสดงเฉพาะจุดในมุมมอง (${totalMarkers} จุด)`;
+                document.body.appendChild(notice);
+                setTimeout(() => {
+                  notice.classList.add('animate-fade-out');
+                  setTimeout(() => notice.remove(), 300);
+                }, 5000);
+              }
+            } else {
+              // โหมดข้อมูลน้อย: แสดงมาร์กเกอร์ทั้งหมด
+              allBuildings.forEach(r => {
+                if (!r.lat_long) return;
+                const coords = r.lat_long.split(',').map(Number);
+                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+                setupMarkerPopup(m, r, 'building');
+                m.addTo(surveyLayers);
+                if (isEditMode) enableMarkerDragging(m, r);
+              });
+              
+              allSigns.forEach(r => {
+                if (!r.lat_long) return;
+                const coords = r.lat_long.split(',').map(Number);
+                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+                setupMarkerPopup(m, r, 'sign');
+                m.addTo(surveyLayers);
+                if (isEditMode) enableMarkerDragging(m, r);
+              });
             }
+          } catch(e) {
+            console.error("Error loading data:", e);
+          }
         }
 
         // แก้ไขฟังก์ชัน refreshData

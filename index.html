@@ -1,1926 +1,1173 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="โนนไทย">
+  <meta charset="UTF-8">
+  <!-- Removed viewport restriction that might hinder zooming -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบสำรวจภาคสนาม</title>
+  <link rel="icon" href="static/icons/lb.ico" type="image/x-icon">
+  <link rel="manifest" href="manifest.json">
 
-    <meta name="theme-color" content="#2563eb">
-    <title>โนนไทย</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="static/icons/lb.ico" type="image/x-icon"> <!-- แก้เป็นพาธสัมพัทธ์ -->
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <style>
-        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; z-index: 0; }
-        
-        /* ข้อ 1: ปรับแต่งเป้าเล็งใหม่ (ใหญ่ขึ้น 20%, หนาขึ้น, สูงขึ้น 15%) */
-        .crosshair {
-            position: absolute;
-            top: 35%; /* สูงขึ้นจากกึ่งกลาง (50% - 15%) */
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 1000;
-        }
-        .crosshair-center {
-            width: 6px; height: 6px;
-            background-color: #ef4444;
-            border-radius: 50%;
-            position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-        }
-        .crosshair-circle {
-            width: 60px; height: 60px; /* ใหญ่ขึ้นจาก 50px */
-            border: 3px solid rgba(239, 68, 68, 0.9); /* เส้นหนาขึ้น */
-            border-radius: 50%;
-            position: relative;
-        }
-        .crosshair-line { position: absolute; background-color: rgba(239, 68, 68, 0.9); }
-        .line-v { width: 3px; height: 18px; left: 50%; transform: translateX(-50%); }
-        .line-h { height: 3px; width: 18px; top: 50%; transform: translateY(-50%); }
-        .v-top { top: -20px; } .v-bottom { bottom: -20px; }
-        .h-left { left: -20px; } .h-right { right: -20px; }
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-        /* แก้ไขส่วน .side-panel ให้โปร่งใส */
-        .side-panel { 
-            transition: transform 0.3s ease-in-out; 
-            transform: translateX(100%); 
-            background: rgba(200, 200, 200, 1.0); /* โปร่งใส 95% */            
-            z-index: 1010;
-            box-shadow: -5px 0 25px rgba(0,0,0,0.15); /* เงาให้ดูดีขึ้น */
-        }
-        .form-label { 
-            font-size: 0.85rem; /* ขนาดใหญ่ขึ้น */
-            font-weight: 700; 
-            color: #dc2626; /* สีแดง */
-            margin-bottom: 0.2rem; /* เพิ่มระยะห่าง */
-            display: block;
-            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8); /* เงาสีขาว */
-        }
-        .form-input { 
-            width: 100%; 
-            padding: 0.5rem 0.75rem; /* เพิ่ม padding */
-            font-size: 0.9rem; /* ขนาดตัวหนังสือใหญ่ขึ้น */
-            font-weight: 600; /* ตัวหนา */
-            color: #2563eb; /* สีน้ำเงิน */
-            background-color: rgba(255, 255, 255, 0.6); /* พื้นหลังโปร่งใส */
-            border: 1.5px solid #d1d5db; /* เส้นหนาขึ้น */
-            border-radius: 0.5rem; 
-            outline: none;
-            transition: border-color 0.2s ease;
-        }
-        .form-input:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); /* เงาชัดเจนขึ้น */
-        }
-        .form-input::placeholder {
-            color: #9ca3af; /* สีเทาอ่อนสำหรับ placeholder */
-            font-style: italic;
-        }
-        .side-panel.open { transform: translateX(0); }
-        
-        .map-btn { background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .active-tool { background-color: #2563eb !important; color: white !important; border: 2px solid white; }
-        .active-edit { background-color: #2563eb !important; color: white !important; border: 2px solid white !important; }
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-        /* ข้อ 2: ปุ่มยืนยันเหนือปุ่มบวก (ระยะห่าง = เส้นผ่าศูนย์กลางปุ่มบวก 70px) */
-        .confirm-btn-overlay {
-        position: absolute;
-        bottom: calc(2.5rem + 4.375rem + 4.375rem); /* bottom-10 (40px) + ความสูงปุ่ม (70px) + ระยะห่าง (70px) */
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 1005;
-        }
-        /* สไตล์สำหรับเมนูฟันเฟือง */
-        #settings-menu button {
-          opacity: 0;
-          transform: translateY(-20px);
-          transition: all 0.3s ease;
-        }
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 
-        #settings-menu button:hover {
-          transform: translateY(0) scale(1.05) !important;
-        }
-        /* ========== แอนิเมชันเลื่อนขึ้น/ลง + ศูนย์กลางสำหรับเป้าเล็งและปุ่มบวก ========== */
-        #crosshair {
-          transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                      opacity 0.6s ease;
-          transform: translate(-50%, -50%) translateY(100vh); /* รวมศูนย์กลาง + เลื่อนจากล่าง */
-          opacity: 0;
-          will-change: transform, opacity;
-        }
-        #crosshair.visible {
-          transform: translate(-50%, -50%) translateY(0); /* ศูนย์กลาง + ตำแหน่งปกติ */
-          opacity: 1;
-        }
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Tahoma, Arial, sans-serif; /* Use Tahoma font */
+      font-size: 10px; /* Set base font size to 10px */
+      background-color: #f0f0f0;
+    }
 
-        #add-trigger-container {
-          transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                      opacity 0.6s ease;
-          transform: translateX(-50%) translateY(100vh); /* รวมศูนย์กลาง + เลื่อนจากล่าง */
-          opacity: 0;
-          will-change: transform, opacity;
-        }
-        #add-trigger-container.visible {
-          transform: translateX(-50%) translateY(0); /* ศูนย์กลาง + ตำแหน่งปกติ */
-          opacity: 1;
-        }
-        /* เพิ่มการเร่งฮาร์ดแวร์สำหรับแผนที่ */
-        #map {
-          transform: translate3d(0, 0, 0);
-          will-change: transform;
-        }
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      /* Hardware acceleration */
+      transform: translate3d(0, 0, 0);
+      will-change: transform;
+      /* Ensure touch events work for zooming on mobile */
+      touch-action: auto !important;
+    }
 
-        /* ปิดการเรนเดอร์ชั่วคราวเมื่อเลื่อนแผนที่ (เพิ่มความลื่น) */
-        .leaflet-zoom-anim .circle-marker,
-        .leaflet-zoom-anim .crosshair {
-          display: none !important;
-        }
-        /* สำหรับมือถือ: ความเร็วแอนิเมชันปรับให้เหมาะสม */
-        @media (max-width: 768px) {
-          #crosshair,
-          #add-trigger-container {
-            transition-duration: 0.35s;
-          }
-        }
-        /* แอนิเมชันสำหรับปุ่มฟันเฟือง */
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-          animation: spin 0.5s linear;
-        }
+    /* Crosshair Styling */
+    #crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none; /* Allow clicks to pass through */
+      z-index: 500; /* High enough to be on top of map controls but below panels */
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #crosshair.hidden {
+        opacity: 0;
+        visibility: hidden;
+    }
+    #crosshair.visible {
+        opacity: 1;
+        visibility: visible;
+    }
 
-        /* สไตล์สำหรับแกลเลอรี่รูปภาพ */
-        #image-gallery-modal {
-        }
+    .crosshair-line {
+      position: absolute;
+      background-color: rgba(255, 0, 0, 0.7); /* Red lines */
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.5); /* Slight shadow */
+    }
+    .horizontal {
+      width: 60px; /* Length of horizontal line */
+      height: 2px;
+      top: -1px; /* Center on crosshair center */
+      left: -30px; /* Center on crosshair center */
+    }
+    .vertical {
+      width: 2px;
+      height: 60px; /* Length of vertical line */
+      top: -30px; /* Center on crosshair center */
+      left: -1px; /* Center on crosshair center */
+    }
 
-        #gallery-grid::-webkit-scrollbar {
-          width: 8px;
-        }
+    .crosshair-circle {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border: 2px solid rgba(255, 0, 0, 0.7); /* Red circle */
+      border-radius: 50%;
+      top: -30px; /* Center on crosshair center */
+      left: -30px; /* Center on crosshair center */
+      box-sizing: border-box;
+    }
 
-        #gallery-grid::-webkit-scrollbar-track {
-          background: #1f2937;
-        }
+    /* Add Trigger Container */
+    #add-trigger-container {
+      position: fixed;
+      top: calc(50% + 80px); /* Positioned below the crosshair */
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 501; /* Slightly higher than crosshair */
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.4s ease; /* Smooth fade and slide up/down */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
 
-        #gallery-grid::-webkit-scrollbar-thumb {
-          background: #4b5563;
-          border-radius: 4px;
-        }
+    #add-trigger-container.hidden {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px); /* Start below */
+        visibility: hidden;
+    }
+    #add-trigger-container.visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0); /* Slide up to original position */
+        visibility: visible;
+    }
 
-        #gallery-grid::-webkit-scrollbar-thumb:hover {
-          background: #6b7280;
-        }
-        /* แอนิเมชันสำหรับ Modal */
-        @keyframes scale-in {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes scale-out {
-            from { opacity: 1; transform: scale(1); }
-            to { opacity: 0; transform: scale(0.9); }
-        }
-        .animate-scale-in { animation: scale-in 0.2s ease-out; }
-        .animate-scale-out { animation: scale-out 0.2s ease-in; }
+    #add-trigger {
+      background-color: #f97316; /* Orange background */
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      font-size: 24px; /* Size of the plus sign */
+      font-weight: bold;
+    }
 
-        /* แอนิเมชันสำหรับแจ้งเตือน */
-        @keyframes fade-in {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fade-out {
-            from { opacity: 1; transform: translateY(0); }
-            to { opacity: 0; transform: translateY(-20px); }
-        }
-        .animate-fade-in { animation: fade-in 0.3s ease-out; }
-        .animate-fade-out { animation: fade-out 0.3s ease-in; }
-        /* สถานะปุ่มรีโหลด */
-        @keyframes flash-green {
-            0%, 100% { background-color: white; }
-            50% { background-color: #22c55e; color: white; }
-        }
-        .refresh-success { animation: flash-green 0.5s ease 3; }
+    #add-trigger:hover {
+      background-color: #ea580c; /* Darker orange on hover */
+    }
 
-        /* แอนิเมชันสำหรับแจ้งเตือน */
-        @keyframes fade-in {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fade-out {
-            from { opacity: 1; transform: translateY(0); }
-            to { opacity: 0; transform: translateY(-20px); }
-        }
-        .animate-fade-in { animation: fade-in 0.3s ease-out; }
-        .animate-fade-out { animation: fade-out 0.3s ease-in; }
+    /* Confirm Overlay */
+    #confirm-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent dark background */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000; /* Very high z-index */
+      opacity: 0;
+      pointer-events: none; /* Initially not interactive */
+      transition: opacity 0.3s ease;
+    }
 
-        .circle-marker {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 2px solid white;
-            cursor: pointer;
-        }
-        .circle-building { background-color: #f59e0b; }
-        .circle-sign { background-color: #4ade80; }
-        
-        .user-location-dot {
-            width: 14px; height: 14px;
-            background-color: #2563eb;
-            border: 2px solid white;
-            border-radius: 50%;
-        }
-        
-        /* สไตล์สำหรับตาราง */
+    #confirm-overlay.active {
+      opacity: 1;
+      pointer-events: all; /* Become interactive when active */
+    }
+
+    .confirm-box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      text-align: center;
+      max-width: 90vw;
+      width: 400px;
+    }
+
+    .confirm-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .confirm-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+
+    .confirm-btn.yes {
+      background-color: #22c55e; /* Green */
+    }
+    .confirm-btn.yes:hover {
+      background-color: #16a34a; /* Darker Green */
+    }
+
+    .confirm-btn.no {
+      background-color: #ef4444; /* Red */
+    }
+    .confirm-btn.no:hover {
+      background-color: #dc2626; /* Darker Red */
+    }
+
+    /* Data Table Panel */
+    .data-table-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 90%; /* Responsive width */
+      max-width: 900px; /* Max width */
+      /* Height adjusted for better mobile experience */
+      max-height: 47vh; /* ✅ Changed from 60vh to 47vh */
+      height: 47vh;     /* ✅ Added this line to give a fixed height of 47% */
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+    }
+
+    .table-header {
+      background-color: #f8f9fa;
+      padding: 10px 15px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #495057;
+      margin: 0;
+    }
+
+    .table-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .table-btn {
+      background-color: #e9ecef;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .table-btn:hover {
+      background-color: #dde0e3;
+    }
+
+    .table-btn.active {
+      background-color: #0d6efd;
+      color: white;
+    }
+
+    .table-content {
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th,
+    .data-table td {
+      border: 1px solid #ddd;
+      padding: 6px; /* Reduced padding */
+      text-align: left;
+      font-size: 10px; /* Match body font size */
+    }
+
+    .data-table th {
+      background-color: #f1f3f4;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .data-table tbody tr:nth-child(even) {
+      background-color: #f8f9fa;
+    }
+
+    .data-table tbody tr:hover {
+      background-color: #e9ecef;
+    }
+
+    .zoom-btn {
+      background-color: #a5d8a9; /* Light green */
+      border: none;
+      border-radius: 4px;
+      padding: 4px 6px;
+      cursor: pointer;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px; /* Shorter width */
+      height: 24px; /* Shorter height */
+    }
+    .zoom-btn:hover {
+      background-color: #8bc38e; /* Slightly darker green */
+    }
+
+    /* Side Panel */
+    .side-panel {
+      position: fixed;
+      top: 0;
+      right: -450px; /* Hidden initially */
+      width: 420px;
+      height: 100vh;
+      background: white;
+      box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+      z-index: 1001;
+      transition: right 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .side-panel.active {
+      right: 0; /* Slide in */
+    }
+
+    .panel-header {
+      background-color: #f8f9fa;
+      padding: 12px 15px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .panel-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin: 0;
+      color: #495057;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #6c757d;
+    }
+    .close-btn:hover {
+      color: #495057;
+    }
+
+    .panel-content {
+      flex-grow: 1;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group {
+      margin-bottom: 12px; /* Reduced margin */
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 4px; /* Reduced margin */
+      font-weight: bold;
+      color: #495057;
+      font-size: 11px; /* Slightly smaller label */
+    }
+
+    .form-input, .form-textarea {
+      width: 100%;
+      padding: 6px 8px; /* Smaller padding */
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 10px; /* Match body font size */
+      box-sizing: border-box;
+    }
+
+    .form-textarea {
+        resize: vertical;
+        min-height: 60px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 10px;
+    }
+
+    .form-row .form-group {
+        flex: 1;
+        margin-bottom: 0; /* Remove bottom margin for items in a row */
+    }
+
+    .save-btn {
+        background-color: #90ee90; /* Light green */
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        color: black; /* Default text color */
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 10px;
+    }
+    .save-btn:hover {
+        background-color: black; /* Black on hover */
+        color: white; /* White text on hover */
+    }
+
+    .delete-btn {
+        background-color: #dc3545; /* Red */
+        border: none;
+        padding: 8px 12px;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+    .delete-btn:hover {
+        background-color: #bd2130; /* Darker red on hover */
+    }
+
+    .image-preview-container {
+        margin-top: 10px;
+    }
+
+    .preview-image {
+        max-width: 100%;
+        max-height: 200px; /* Limit preview height */
+        border-radius: 4px;
+        object-fit: contain; /* Maintain aspect ratio */
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+    }
+
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      border-top: 4px solid #007bff;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 5px;
+      color: white;
+      font-weight: bold;
+      z-index: 2001;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .notification.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .notification.success { background-color: #28a745; }
+    .notification.error { background-color: #dc3545; }
+
+    /* Edit Mode Modal */
+    #edit-mode-modal {
+      display: none; /* Hidden by default */
+      position: fixed;
+      z-index: 2002; /* Higher than other elements */
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5); /* Black w/ opacity */
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 15% auto; /* 15% from the top and centered */
+      padding: 20px;
+      border: 1px solid #888;
+      border-radius: 8px;
+      width: 80%;
+      max-width: 400px; /* Max width */
+      text-align: center;
+    }
+
+    .modal-buttons {
+      margin-top: 15px;
+    }
+
+    .modal-btn {
+      padding: 8px 16px;
+      margin: 0 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .modal-btn.save { background-color: #28a745; color: white; }
+    .modal-btn.cancel { background-color: #6c757d; color: white; }
+
+    .modal-btn.save:hover { background-color: #218838; }
+    .modal-btn.cancel:hover { background-color: #5a6268; }
+
+    /* Button Styles */
+    .app-button {
+      background-color: #e2e6ea;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #495057;
+      transition: background-color 0.2s, color 0.2s;
+    }
+    .app-button:hover {
+      background-color: #dae0e5;
+      color: #212529;
+    }
+    .app-button.active-tool {
+        background-color: #f97316; /* Orange when active */
+        color: white;
+    }
+    .app-button.active-edit {
+        background-color: #10b981; /* Emerald when edit mode is active */
+        color: white;
+    }
+
+    .top-right-controls, .bottom-left-controls {
+        position: fixed;
+        z-index: 1000;
+        display: flex;
+        gap: 8px;
+    }
+    .top-right-controls {
+        top: 20px;
+        right: 20px;
+    }
+    .bottom-left-controls {
+        bottom: calc(20px + 47vh + 20px); /* Account for table panel height and margin */
+        left: 20px;
+    }
+
+    /* Settings Menu */
+    .settings-menu {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 1000;
+    }
+
+    /* Animation Classes */
+    .animate-fade-in {
+      animation: fadeIn 0.3s forwards;
+    }
+    .animate-fade-out {
+      animation: fadeOut 0.3s forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    /* Hide markers during zoom for performance */
+    .leaflet-zoom-anim .circle-marker,
+    .leaflet-zoom-anim .crosshair {
+        display: none !important;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
         .data-table-panel {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            width: 90%;
-            max-width: 900px;
-            max-height: 47vh; /* ✅ เปลี่ยนจาก 60vh เป็น 47vh */
-            height: 47vh; /* ✅ เพิ่มบรรทัดนี้เพื่อให้ความสูงคงที่ 47% */
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            z-index: 1003;
-            display: none;
-            flex-direction: column;
-            overflow: hidden;
-            transform: translateY(100%);
-            transition: transform 0.3s ease;
+            left: 10px;
+            right: 10px;
+            width: auto;
+            bottom: 10px;
         }
-        .data-table-panel.open {
-            display: flex;
-            transform: translateY(0);
+        .side-panel {
+             width: calc(100% - 20px); /* Nearly full width on small screens */
+             max-width: none;
         }
-        .data-table-panel.open {
-            display: flex;
-            transform: translateY(0);
+        .top-right-controls, .bottom-left-controls {
+             gap: 6px; /* Smaller gap on mobile */
         }
-        .table-header {
-            background: linear-gradient(135deg, #667eea 0%, #db2777 100%);
-            color: white;
-            padding: 0.1rem 0.5rem;
-            min-height: 20px;       /* กำหนดความสูงต่ำสุดให้เล็กลง */
-            height: 44px;  
-            gap: 0.25rem;    
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        .app-button {
+             padding: 6px 10px; /* Smaller buttons */
+             font-size: 11px;
         }
-        .table-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .table-tab {
-            padding: 6px 6px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        .table-tab.active {
-            background: white;
-            color: #667eea;
-        }
-        .table-tab:hover:not(.active) {
-            background: rgba(255,255,255,0.2);
-        }
-        .table-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-        .data-table th {
-            background: #f3f4f6;
-            padding: 6px 8px;
-            text-align: left;
-            font-weight: 700;
-            color: #374151;
-            border-bottom: 2px solid #e5e7eb;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-        .data-table td {
-            padding: 4px;
-            border-bottom: 1px solid #e5e7eb;
-            vertical-align: middle;
-        }
-        .data-table tr:hover {
-            background: #f9fafb;
-        }
-        .data-table tr:nth-child(even) {
-            background: #f9fafb;
-        }
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .status-pending { background: #fef3c7; color: #92400e; }
-        .status-verified { background: #d1fae5; color: #065f46; }
-        .status-rejected { background: #fee2e2; color: #991b1b; }
-        .zoom-btn {
-            padding: 4px 10px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        .zoom-btn:hover {
-            background: #1d4ed8;
-            transform: scale(1.05);
-        }
-        .marker-icon {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: 2px solid white;
-        }
-        .marker-building { background-color: #f97316; }
-        .marker-sign { background-color: #22c55e; }
-    </style>
+    }
+
+    /* Ensure map container fills the screen */
+    #map.leaflet-container {
+         touch-action: auto !important; /* Critical for mobile zoom gestures */
+    }
+  </style>
 </head>
-<!-- Custom Modal Dialogs -->
-<!-- Modal ยืนยันการลบ -->
-<div id="confirm-delete-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2000] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-scale-in">
-        <div class="p-6">
-            <div class="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mx-auto mb-4">
-                <i data-lucide="trash-2" class="w-8 h-8 text-red-600"></i>
-            </div>
-            <h3 id="delete-modal-title" class="text-xl font-bold text-center text-gray-900 mb-2">ยืนยันการลบ</h3>
-            <p id="delete-modal-message" class="text-center text-gray-600 mb-6">คุณแน่ใจว่าต้องการลบสิ่งปลูกสร้างนี้?</p>
-            
-            <div class="flex gap-3">
-                <button onclick="cancelDelete()" class="flex-1 py-3 px-6 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all active:scale-95">
-                    ยกเลิก
-                </button>
-                <button onclick="confirmDeleteAction()" class="flex-1 py-3 px-6 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-2">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    ลบ
-                </button>
-            </div>
+<body>
+  <div id="map"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair" class="hidden">
+    <div class="crosshair-line horizontal"></div>
+    <div class="crosshair-line vertical"></div>
+    <div class="crosshair-circle"></div>
+  </div>
+
+  <!-- Add Trigger Button Container -->
+  <div id="add-trigger-container" class="hidden">
+    <button id="add-trigger">+</button>
+  </div>
+
+  <!-- Confirm Overlay -->
+  <div id="confirm-overlay" class="hidden">
+    <div class="confirm-box">
+      <div class="confirm-title" id="confirm-text">ยืนยันการดำเนินการ?</div>
+      <div class="confirm-actions">
+        <button class="confirm-btn yes" id="btn-confirm-yes">ใช่</button>
+        <button class="confirm-btn no" id="btn-confirm-no">ไม่</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Menu (Gear Icon) -->
+  <div class="settings-menu">
+      <button id="btn-settings" class="app-button">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+      </button>
+  </div>
+
+  <!-- Top Right Controls -->
+  <div class="top-right-controls">
+      <button id="btn-building" class="app-button">
+          <i data-lucide="home" class="w-4 h-4"></i> สิ่งปลูกสร้าง
+      </button>
+      <button id="btn-sign" class="app-button">
+          <i data-lucide="tag" class="w-4 h-4"></i> ป้าย
+      </button>
+  </div>
+
+  <!-- Bottom Left Controls -->
+  <div class="bottom-left-controls">
+      <button id="btn-refresh" class="app-button">
+          <i id="refresh-icon" data-lucide="refresh-cw" class="w-4 h-4"></i>
+      </button>
+      <button id="btn-edit" class="app-button">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+      </button>
+  </div>
+
+  <!-- Data Table Panel -->
+  <div class="data-table-panel" id="data-table-panel">
+    <div class="table-header">
+        <h3 class="table-title">ข้อมูลภาคสนาม</h3>
+        <div class="table-controls">
+            <button class="table-btn active" data-type="building">สิ่งปลูกสร้าง</button>
+            <button class="table-btn" data-type="sign">ป้าย</button>
+            <button class="table-btn" id="btn-export-geojson">GeoJSON</button>
+            <button class="table-btn" id="btn-export-sign-geojson">GeoJSON ป้าย</button>
+            <button class="table-btn" id="btn-load-images">Load Images</button>
         </div>
     </div>
-</div>
-<!-- Modal โหมดแก้ไข -->
-<div id="edit-mode-modal" class="fixed inset-0 bg-black/30 backdrop-blur-sm z-[2000] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-scale-in">
-        <div class="p-6">
-            <div class="flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4">
-                <i data-lucide="move" class="w-8 h-8 text-blue-600"></i>
-            </div>
-            <h3 class="text-xl font-bold text-center text-gray-900 mb-2">โหมดแก้ไขตำแหน่ง</h3>
-            <p class="text-center text-gray-600 mb-6">คลิกและลากหมุดเพื่อย้ายตำแหน่ง</p>
-            
-            <div class="flex justify-center">
-                <button onclick="closeEditModeModal()" class="py-3 px-8 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all active:scale-95">
-                    ตกลง
-                </button>
-            </div>
-        </div>
+    <div class="table-content">
+        <table class="data-table">
+            <thead>
+                <tr id="building-table-header">
+                    <!-- Headers populated by JS -->
+                </tr>
+            </thead>
+            <tbody id="building-table-body">
+                 <!-- Rows populated by JS -->
+            </tbody>
+        </table>
+        <table class="data-table hidden" id="sign-table-container">
+            <thead>
+                <tr id="sign-table-header">
+                    <!-- Headers populated by JS -->
+                </tr>
+            </thead>
+            <tbody id="sign-table-body">
+                 <!-- Rows populated by JS -->
+            </tbody>
+        </table>
     </div>
-</div>
-<body class="bg-gray-100">
+  </div>
 
-    <div id="map"></div>
-
-    <!-- เป้าเล็ง -->
-    <div id="crosshair" class="crosshair hidden">
-        <div class="crosshair-circle">
-            <div class="crosshair-line line-v v-top"></div>
-            <div class="crosshair-line line-v v-bottom"></div>
-            <div class="crosshair-line line-h h-left"></div>
-            <div class="crosshair-line line-h h-right"></div>
-        </div>
-        <div class="crosshair-center"></div>
+  <!-- Side Panel -->
+  <div class="side-panel" id="side-panel">
+    <div class="panel-header">
+        <h3 class="panel-title" id="panel-title">รายละเอียด</h3>
+        <button class="close-btn">&times;</button>
     </div>
-
-    <!-- ปุ่มคอนเฟิร์ม (ข้อ 2) -->
-    <div id="confirm-overlay" class="confirm-btn-overlay hidden">
-        <button id="btn-confirm-action" onclick="confirmCapture()" class="flex items-center gap-2 px-6 py-4 rounded-full text-white font-bold shadow-2xl active:scale-95 transition-all text-lg border-4 border-white">
-            <i data-lucide="check-circle" class="w-6 h-6"></i>
-            <span id="confirm-text">ยืนยันการเพิ่มจุด</span>
-        </button>
+    <div class="panel-content" id="panel-content">
+        <!-- Content populated by JS -->
     </div>
+  </div>
 
-        <!-- ปุ่มฟันเฟืองและรีเฟรช (ด้านบนซ้าย) -->
-        <div class="absolute top-4 left-4 z-[1001]">
-          <!-- ปุ่มฟันเฟือง (เมนูหลัก) -->
-          <button id="btn-settings" onclick="toggleSettingsMenu()" class="map-btn p-3 text-gray-600 hover:text-blue-600 transition-all relative group mb-2">
-            <i data-lucide="settings-2" id="settings-icon" class="w-6 h-6"></i>
-            <!-- จุดแจ้งเตือน -->
-            <span id="settings-badge" class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full hidden"></span>
-          </button>
-          
-          <!-- ปุ่มรีเฟรช -->
-          <button id="btn-refresh" onclick="refreshData()" class="map-btn p-3 text-blue-600 transition-all">
-            <i data-lucide="refresh-cw" id="refresh-icon" class="w-6 h-6"></i>
-          </button>
-          
-          <!-- ปุ่มย่อยที่เลื่อนลงมา -->
-          <div id="settings-menu" class="mt-2 space-y-2 hidden">
-            <!-- ปุ่ม 1: ดาวน์โหลดสิ่งปลูกสร้าง -->
-            <button onclick="exportBuildingGeoJSON()" class="map-btn p-3 w-48 bg-gradient-to-r from-orange-400 to-orange-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
-              <i data-lucide="home" class="w-5 h-5"></i>
-              <span class="text-xs font-bold">ดาวน์โหลดสิ่งปลูกสร้าง</span>
-            </button>
-            <!-- ปุ่ม 2: ดาวน์โหลดป้าย -->
-            <button onclick="exportSignGeoJSON()" class="map-btn p-3 w-48 bg-gradient-to-r from-green-400 to-green-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
-              <i data-lucide="map-pin" class="w-5 h-5"></i>
-              <span class="text-xs font-bold">ดาวน์โหลดป้าย</span>
-            </button>
-            <!-- ปุ่ม 3: ดาวน์โหลดรูปสิ่งปลูกสร้าง -->
-            <button onclick="loadBuildingImages()" class="map-btn p-3 w-48 bg-gradient-to-r from-blue-400 to-blue-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
-              <i data-lucide="image" class="w-5 h-5"></i>
-              <span class="text-xs font-bold">ดาวน์โหลดรูปสิ่งปลูกสร้าง</span>
-            </button>
-            <!-- ปุ่ม 4: ดาวน์โหลดรูปป้าย -->
-            <button onclick="loadSignImages()" class="map-btn p-3 w-48 bg-gradient-to-r from-purple-400 to-purple-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
-              <i data-lucide="gallery-horizontal" class="w-5 h-5"></i>
-              <span class="text-xs font-bold">ดาวน์โหลดรูปป้าย</span>
-            </button>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+  </div>
+
+  <!-- Edit Mode Modal -->
+  <div id="edit-mode-modal">
+      <div class="modal-content">
+          <p>อยู่ในโหมดแก้ไข</p>
+          <p>คลิก "บันทึก" เพื่อยืนยันการเปลี่ยนแปลง</p>
+          <div class="modal-buttons">
+              <button class="modal-btn save" id="btn-save-edits">บันทึก</button>
+              <button class="modal-btn cancel" id="btn-cancel-edit">ยกเลิก</button>
           </div>
-        </div>
+      </div>
+  </div>
 
-    <!-- ปุ่มเลือกประเภทและแก้ไข -->
-    <div class="absolute top-4 right-4 z-[1001] flex flex-row gap-2">
-        <button id="btn-building" onclick="activateTool('building')" class="map-btn p-3" title="เพิ่มสิ่งปลูกสร้าง">
-            <i data-lucide="home" class="w-6 h-6 text-orange-500"></i>
-        </button>
-        <button id="btn-sign" onclick="activateTool('sign')" class="map-btn p-3" title="เพิ่มป้าย">
-            <i data-lucide="map-pin" class="w-6 h-6 text-green-500"></i>
-        </button>
-        <button id="btn-edit" onclick="toggleEditMode()" class="map-btn p-3" title="โหมดแก้ไขตำแหน่ง">
-            <i data-lucide="move" class="w-6 h-6 text-red-600"></i>
-        </button>
-    </div>
+  <!-- Notification -->
+  <div id="notification" class="notification"></div>
 
-    <!-- ปุ่มตำแหน่งปัจจุบัน -->
-    <div class="absolute bottom-4 left-4 z-[1001]">
-    <button onclick="locateUser()" class="map-btn p-3 shadow-lg border-2 border-blue-100">
-    <div class="user-location-dot"></div>
-    </button>
-    </div>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- ปุ่มบวก (Add Trigger) -->
-    <div id="add-trigger-container" class="absolute bottom-10 left-1/2 -translate-x-1/2 z-[1001] hidden">
-        <button onclick="showConfirmButton()" class="p-4 bg-blue-600/50 text-white rounded-full shadow-xl border-[3px] border-white active:scale-90 transition-all">
-            <i data-lucide="plus" class="w-8 h-8"></i>
-        </button>
-    </div>
+  <script>
+    // --- Configuration ---
+    const CONFIG = {
+        SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyJ1DNqz7Uzytm_mjP3bR9RKQYHmM5VzFvCk4rD1GgIfN1sZoLm/exec', // Replace with your Apps Script URL
+        // For offline tile caching, the base URL pattern is needed
+        TILE_BASE_URLS: [
+            'https://mt0.google.com/',
+            'https://mt1.google.com/',
+            'https://mt2.google.com/',
+            'https://mt3.google.com/'
+        ]
+    };
 
-    <!-- ปุ่มแสดงตาราง -->
-    <div class="absolute bottom-4 right-4 z-[1002]">
-        <button id="btn-show-table" onclick="toggleTable()" class="map-btn p-3 bg-white hover:bg-blue-50">
-            <i data-lucide="table" id="table-icon" class="w-6 h-6 text-blue-600"></i>
-        </button>
-    </div>
+    // --- Global Variables ---
+    let map;
+    let surveyLayers; // LayerGroup for markers
+    let activeTool = null; // 'building' or 'sign'
+    let isEditMode = false;
+    let allBuildings = [];
+    let allSigns = [];
+    let editingMarker = null; // Marker currently being edited in side panel
+    let currentTypeFilter = 'building'; // Current table view
 
-    <!-- หน้าต่างตารางข้อมูล -->
-    <div id="data-table-panel" class="data-table-panel">
-        <div class="table-header">
-            <div class="flex items-center gap-2">
-                <div class="table-tabs">
-                    <div class="table-tab active" onclick="switchTableTab('building')">สิ่งปลูกสร้าง</div>
-                    <div class="table-tab" onclick="switchTableTab('sign')">ป้าย</div>
-                </div>
-            </div>
-            <button onclick="toggleTable()" class="p-1.5 hover:bg-white/20 rounded-full">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
-        </div>
-        <div class="table-content">
-            <div id="building-table-container" class="table-tab-content">
-                <table class="data-table" id="building-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
-                            <th>รหัส</th>
-                            <th>เจ้าของ</th>
-                            <th>ที่อยู่</th>
-                            <th>ประเภท</th>
-                            <th>พื้นที่ (ตร.ม.)</th>
-                            <th>ตรวจสอบ</th>
-                            <th style="width: 60px">ซูม</th>
-                        </tr>
-                    </thead>
-                    <tbody id="building-table-body">
-                        <tr>
-                            <td colspan="8" class="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div id="sign-table-container" class="table-tab-content hidden">
-                <table class="data-table" id="sign-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
-                            <th>รหัส</th>
-                            <th>ชื่อกิจการ</th>
-                            <th>ประเภท</th>
-                            <th>กว้าง (ม.)</th>
-                            <th>ยาว (ม.)</th>
-                            <th>ข้อความ</th>
-                            <th style="width: 60px">ซูม</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sign-table-body">
-                        <tr>
-                            <td colspan="8" class="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- หน้าต่างกรอกข้อมูล -->
-    <div id="side-panel" class="side-panel fixed top-0 right-0 w-[44vw] sm:w-[280px] h-full z-[1002] shadow-2xl flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center bg-gray-50">
-            <div>
-                <h2 id="panel-title" class="font-bold text-blue-900">บันทึกข้อมูล</h2>
-                <p id="latlng-display" class="text-[10px] text-gray-500 font-mono"></p>
-            </div>
-            <button onclick="closePanel()" class="p-2 hover:bg-gray-200 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
-        </div>
-        <form id="survey-form" class="flex-1 overflow-y-auto p-4 space-y-3"></form>
-        <div class="p-4 bg-white border-t">
-            <button type="button" onclick="saveSurveyData()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
-                <i data-lucide="save" class="w-5 h-5"></i> บันทึก
-            </button>
-        </div>
-    </div>
-
-    <script>
-        const CONFIG = {
-            SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx_NlwFmiw31BxckLSYI_q0Bu24YXw4XFkwrqvUz1LYvT6W0DcYkdpSIQXoysJhq4gVCQ/exec'
-        };
-
-        let map, activeTool = null, isEditMode = false;
-        let surveyLayers = L.layerGroup();
-        let editingMarker = null;
-        let allBuildings = [];
-        let allSigns = [];
-
-        function initMap() {
-          map = L.map('map', { 
-            zoomControl: false, 
-            attributionControl: false,
-            preferCanvas: true
-            // ลบบรรทัด: tap: isMobile()
-          }).setView([15.202, 102.068], 14);
-          
-        // ปรับการตั้งค่าไทล์ให้โหลดรอบๆ มากขึ้น
-        L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-          maxZoom: 22,
-          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-          updateWhenIdle: false, // ✅ โหลดขณะเลื่อน (ไม่รอหยุด)
-          updateWhenZooming: true,
-          keepBuffer: 4, // ✅ เก็บไทล์รอบๆ เพิ่มอีก 4 ชั้น (จากเดิม 2)
-          maxNativeZoom: 19, // ป้องกันการโหลดไทล์ที่ไม่มี
-          reuseTiles: true // ใช้ไทล์เก่าซ้ำแทนโหลดใหม่
-        }).addTo(map);
-          
-          surveyLayers.addTo(map);
-          
-          // ปรับแต่งเฉพาะมือถือ
-          if (isMobile()) {
-            // จำกัดซูมสูงสุดเพื่อลดการโหลดไทล์ความละเอียดสูง
-            map.options.zoomSnap = 0.5; // ซูมแบบละเอียด
-          }
-        }
-        // ตรวจจับอุปกรณ์มือถือ
-        function isMobile() {
-          return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
-
-        function activateTool(tool) {
-          isEditMode = false;
-          document.getElementById('btn-edit').classList.remove('active-edit');
-          surveyLayers.eachLayer(l => l.dragging && l.dragging.disable());
-          
-          if (activeTool === tool) {
-            // ยกเลิกการเพิ่มจุด - เลื่อนลง
-            deactivateTools();
-          } else {
-            // เปิดใช้งานเครื่องมือใหม่
-            activeTool = tool;
-            document.getElementById('btn-building').classList.toggle('active-tool', tool === 'building');
-            document.getElementById('btn-sign').classList.toggle('active-tool', tool === 'sign');
-            
-            // แสดงเป้าเล็งและปุ่มบวกด้วยแอนิเมชันเลื่อนขึ้น
-            const crosshair = document.getElementById('crosshair');
-            const addTrigger = document.getElementById('add-trigger-container');
-            
-            // ลบคลาส hidden และเพิ่มคลาส visible พร้อมแอนิเมชัน
-            crosshair.classList.remove('hidden');
-            addTrigger.classList.remove('hidden');
-            
-            // บังคับให้เบราว์เซอร์คำนวณใหม่ก่อนเริ่มแอนิเมชัน
-            void crosshair.offsetWidth;
-            void addTrigger.offsetWidth;
-            
-            // เริ่มแอนิเมชันเลื่อนขึ้น
-            crosshair.classList.add('visible');
-            addTrigger.classList.add('visible');
-            
-            // ซ่อนปุ่มคอนเฟิร์มหากมี
-            document.getElementById('confirm-overlay').classList.add('hidden');
-          }
-        }
-
-        function deactivateTools() {
-          activeTool = null;
-          document.getElementById('btn-building').classList.remove('active-tool');
-          document.getElementById('btn-sign').classList.remove('active-tool');
-          
-          const crosshair = document.getElementById('crosshair');
-          const addTrigger = document.getElementById('add-trigger-container');
-          
-          // เริ่มแอนิเมชันเลื่อนลง
-          crosshair.classList.remove('visible');
-          addTrigger.classList.remove('visible');
-          
-          // หลังแอนิเมชันเสร็จ ซ่อนองค์ประกอบจริงๆ
-          setTimeout(() => {
-            crosshair.classList.add('hidden');
-            addTrigger.classList.add('hidden');
-            document.getElementById('confirm-overlay').classList.add('hidden');
-          }, 400); // ตรงกับระยะเวลาแอนิเมชัน 0.4s
-        }
-
-        function toggleEditMode() {
-            isEditMode = !isEditMode;
-            
-            if (isEditMode) {
-                activeTool = null;
-                document.getElementById('btn-building').classList.remove('active-tool');
-                document.getElementById('btn-sign').classList.remove('active-tool');
-                document.getElementById('crosshair').classList.add('hidden');
-                document.getElementById('add-trigger-container').classList.add('hidden');
-            }
-            
-            const btn = document.getElementById('btn-edit');
-            btn.classList.toggle('active-edit', isEditMode);
-
-            // แปลงทุก marker → เป็น draggable marker (สร้างใหม่ทั้งหมด)
-            const markers = [];
-            surveyLayers.eachLayer(layer => {
-                // ✅ เปลี่ยนจาก L.CircleMarker เป็น L.Marker
-                if (layer instanceof L.Marker) {
-                    const data = layer._popupData;
-                    if (data) {
-                        markers.push({
-                            latlng: layer.getLatLng(),
-                            data: data,
-                            type: data.type
-                        });
-                    }
-                    surveyLayers.removeLayer(layer);
-                }
-            });
-
-            // สร้างใหม่ทั้งหมดพร้อมเปิดใช้งาน dragging
-            markers.forEach(marker => {
-                const newMarker = createCircleMarker(
-                    marker.latlng,
-                    marker.type,
-                    isEditMode  // draggable
-                );
-                
-                // ผูกข้อมูลและป๊อปอัป
-                newMarker._popupData = marker.data;
-                setupMarkerPopup(newMarker, marker.data, marker.type);
-                newMarker.addTo(surveyLayers);
-                
-                // ผูกเหตุการณ์เมื่อเปิดโหมดแก้ไข
-                if (isEditMode) {
-                    newMarker.on('dragend', async (e) => {
-                        const newLatLng = e.target.getLatLng();
-                        const marker = e.target;
-                        const data = marker._popupData;
-                        if (data) {
-                            await updateMarkerPosition(marker, data, newLatLng);
-                        }
-                    });
-                }
-            });
-
-            if (isEditMode) {
-                showEditModeModal();
-            }
-        }
-
-        // ฟังก์ชันสำหรับปิด/เปิดการใช้งานปุ่มรีโหลด
-        function disableRefreshButton() {
-            const btn = document.getElementById('btn-refresh');
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.cursor = 'not-allowed';
-        }
-
-        function enableRefreshButton() {
-            const btn = document.getElementById('btn-refresh');
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-        }
-
-        // แก้ไขฟังก์ชัน updateMarkerPosition
-        async function updateMarkerPosition(marker, data, newLatLng) {
-            const refreshBtn = document.getElementById('btn-refresh');
-            const refreshIcon = document.getElementById('refresh-icon');
-            
-            // ปิดการใช้งานปุ่ม
-            disableRefreshButton();
-            refreshIcon.classList.add('animate-spin');
-            
-            const oldLatLng = data.lat_long;
-            const newLatLngStr = `${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
-            
-            const rowKey = data._row_num || data.id;
-            const type = data.type || (data.building_c ? 'building' : 'sign');
-            
-            if (!rowKey) {
-                alert("ไม่พบข้อมูลสำหรับอัปเดต");
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                return;
-            }
-            
-            const body = new URLSearchParams();
-            body.append('action', 'updatePosition');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            body.append('lat_long', newLatLngStr);
-            
-            try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
-                if (res.ok) {
-                    data.lat_long = newLatLngStr;
-                    setupMarkerPopup(marker, data, type);
-                    await loadExistingData();
-                    
-                    refreshIcon.classList.remove('animate-spin');
-                    refreshBtn.classList.add('refresh-success');
-                    setTimeout(() => {
-                        refreshBtn.classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
-                    console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
-                } else {
-                    throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
-                }
-            } catch (err) {
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                console.error("Error updating position:", err);
-                alert("เกิดข้อผิดพลาดในการอัปเดตตำแหน่ง");
-                const oldPos = L.latLng(oldLatLng.split(',').map(Number));
-                marker.setLatLng(oldPos);
-            }
-        }
-
-        // ข้อ 2: แสดงปุ่มยืนยัน
-        function showConfirmButton() {
-            const overlay = document.getElementById('confirm-overlay');
-            const btn = document.getElementById('btn-confirm-action');
-            const text = document.getElementById('confirm-text');
-
-            if (activeTool === 'building') {
-                btn.style.backgroundColor = '#f97316'; 
-                text.innerText = "เพิ่มสิ่งปลูกสร้าง";
-            } else {
-                btn.style.backgroundColor = '#22c55e';
-                text.innerText = "ยืนยันเพิ่มป้าย";
-            }
+    // --- Utility Functions ---
+    function showLoading(show) {
+        const overlay = document.getElementById('loading-overlay');
+        if (show) {
             overlay.classList.remove('hidden');
+        } else {
+            overlay.classList.add('hidden');
+        }
+    }
+
+    function showNotification(message, type) {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.className = `notification ${type} show`;
+
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, 3000);
+    }
+
+    function isMobile() {
+        return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+
+    // --- Map Initialization ---
+    function initMap() {
+        // Initialize map with canvas rendering and hardware acceleration
+        map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false,
+            preferCanvas: true // ✅ Enable Canvas Rendering
+        }).setView([15.202, 102.068], 14); // Adjusted initial view
+
+        // Multi-resolution tile layers
+        const lowResLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 15, // Low resolution up to zoom 15
+            opacity: 1.0,
+            zIndex: 1,
+            // Optimized for performance
+            updateWhenIdle: false,
+            updateWhenZooming: true,
+            keepBuffer: 4,
+            reuseTiles: true
+            // Note: maxNativeZoom might cause issues if tiles don't exist at high zooms from these sources
+            // Consider removing or adjusting based on available tile levels
+            // maxNativeZoom: 19 
+        });
+
+        const highResLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            minZoom: 16, // High resolution from zoom 16 onwards
+            maxZoom: 22, // Max display zoom for this layer
+            opacity: 1.0,
+            zIndex: 2,
+            // Optimized for performance
+            updateWhenIdle: false,
+            updateWhenZooming: true,
+            keepBuffer: 2, // Slightly less buffer for high-res as it's more detailed
+            reuseTiles: true
+            // Note: maxNativeZoom might cause issues if tiles don't exist at high zooms from these sources
+            // Consider removing or adjusting based on available tile levels
+            // maxNativeZoom: 19
+        });
+
+        // Apply hardware acceleration to map container
+        map.getContainer().style.transform = 'translate3d(0, 0, 0)';
+        map.getContainer().style.willChange = 'transform';
+
+        lowResLayer.addTo(map);
+        highResLayer.addTo(map);
+
+        // Create layer group for markers
+        surveyLayers = L.layerGroup().addTo(map);
+
+        // Add layers to map
+        surveyLayers.addTo(map);
+
+        // Optional: Adjust settings specifically for mobile if needed, but avoid limiting zoom unnecessarily
+        if (isMobile()) {
+            // Removed map._limitZoom and map.options.zoomSnap to allow normal zoom behavior on mobile
+            // map.options.zoomSnap = 0.5; // This can make zoom feel less smooth
+        }
+    }
+
+
+    // --- Marker Functions ---
+    function createCircleMarker(latlng, type, draggable = false) {
+        const isBuilding = type === 'building';
+        const color = isBuilding ? '#f97316' : '#22c55e'; // Orange for building, green for sign
+        const radius = isBuilding ? 8 : 6;
+
+        const marker = L.circleMarker(latlng, {
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.8,
+            radius: radius,
+            className: 'circle-marker' // Add class for potential performance hiding during zoom
+        });
+
+        if (draggable) {
+            marker.dragging.enable();
         }
 
-        // ข้อ 2: ยืนยันและบันทึกเบื้องหลัง
-        async function confirmCapture() {
-            // คำนวณพิกัดตามตำแหน่งเป้า (สูงขึ้น 15%)
-            const containerPoint = L.point(map.getSize().x / 2, map.getSize().y * 0.35);
-            const latlng = map.containerPointToLatLng(containerPoint);
+        return marker;
+    }
 
-            document.getElementById('confirm-overlay').classList.add('hidden');
-            
-            const tempMarker = createCircleMarker(latlng, activeTool);
-            tempMarker.addTo(surveyLayers);
-            
-            backgroundUpload(latlng, activeTool, tempMarker);
-        }
+    function setupMarkerPopup(marker, data, type) {
+        const isBuilding = type === 'building';
+        let popupContent = `<b>${isBuilding ? 'สิ่งปลูกสร้าง' : 'ป้าย'}</b><br>`;
+        if (isBuilding && data.b_number) popupContent += `No.: ${data.b_number}<br>`;
+        if (data.owner_name) popupContent += `เจ้าของ: ${data.owner_name}<br>`;
+        if (data.lat_long) popupContent += `พิกัด: ${data.lat_long}`;
 
-        // แก้ไขฟังก์ชัน backgroundUpload ให้ส่งข้อมูลครบถ้วน
-        async function backgroundUpload(latlng, type, marker) {
-          const refreshBtn = document.getElementById('btn-refresh');
-          const refreshIcon = document.getElementById('refresh-icon');
-          
-          // ปิดการใช้งานปุ่ม
-          disableRefreshButton();
-          refreshIcon.classList.add('animate-spin');
-          
-          // ✅ สร้างข้อมูลพื้นฐานสำหรับป้าย/สิ่งปลูกสร้าง
-          const data = {
-            lat_long: `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`,
-            date_added: new Date().toISOString()
-          };
-          
-          // ✅ เพิ่มข้อมูลเริ่มต้นสำหรับป้าย
-          if (type === 'sign') {
-            data.s_code = `05G032-S${Date.now().toString().slice(-4)}`; // รหัสป้ายเริ่มต้น
-            data.s_name = 'ป้ายใหม่';
-            data.s_type = 'ป้ายทั่วไป';
-            data.s_wide = '0';
-            data.s_length = '0';
-          }
-          
-          // ✅ เพิ่มข้อมูลเริ่มต้นสำหรับสิ่งปลูกสร้าง
-          if (type === 'building') {
-            data.building_c = `B${Date.now().toString().slice(-5)}`; // รหัสสิ่งปลูกสร้างเริ่มต้น
-            data.full_name = 'เจ้าของใหม่';
-            data.b_type = 'บ้านพักอาศัย';
-            data.b_area = '0';
-          }
-          
-          const body = new URLSearchParams();
-          body.append('type', type);
-          body.append('payload', JSON.stringify(data));
-          body.append('action', 'quickAdd');
-          
-          try {
-            const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
-            if (res.ok) {
-              refreshIcon.classList.remove('animate-spin');
-              refreshBtn.classList.add('refresh-success');
-              setTimeout(() => {
-                refreshBtn.classList.remove('refresh-success');
-                enableRefreshButton();
-              }, 2000);
-              
-              // ✅ เพิ่มไอดีที่ได้รับจากเซิร์ฟเวอร์ลงในข้อมูล
-              const result = await res.json();
-              if (result.data && result.data.id) {
-                data.id = result.data.id;
-              }
-              
-              setupMarkerPopup(marker, { ...data, id: data.id || Date.now() }, type);
-              await loadExistingData();
-            }
-          } catch (err) {
-            refreshIcon.classList.remove('animate-spin');
-            enableRefreshButton();
-            marker.remove();
-            alert("การบันทึกล้มเหลว: " + err.message);
-          }
-        }
+        marker.bindPopup(popupContent);
+        // Store data reference on marker for later use (e.g., editing)
+        marker._popupData = {...data, type: type};
+    }
 
-        // ข้อ 3: ตั้งค่าป๊อปอัปเพื่อเปิดฟอร์ม (แก้ไขเพิ่มปุ่มลบ)
-        function setupMarkerPopup(marker, data, type) {
-            const popupDiv = document.createElement('div');
-            popupDiv.className = "p-1 min-w-[160px]";
-            popupDiv.innerHTML = `
-                <p class="font-bold text-sm text-blue-900">${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'}</p>
-                <p class="text-[10px] text-gray-500">${data.lat_long}</p>
-                <div class="mt-2 space-y-1">
-                    <button class="w-full bg-blue-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-blue-700">แก้ข้อมูล</button>
-                    <button class="w-full bg-red-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-red-700">ลบจุด</button>
-                </div>
-            `;
-            
-            // เปลี่ยนเป็น:
-            marker.bindPopup(popupDiv, { 
-                minWidth: 190,  // กำหนดความกว้างขั้นต่ำ
-                maxWidth: 220   // กำหนดความกว้างสูงสุด
-            });
-            marker._popupData = { ...data, type: type };
-            
-            marker.on('popupopen', () => {
-                const buttons = marker.getPopup().getElement().querySelectorAll('button');
-                
-                // ปุ่มแก้ข้อมูล
-                buttons[0].onclick = () => openEditPanel(data, type, marker);
-                
-                // ปุ่มลบจุด - ใช้หน้าต่างกำหนดเอง
-                buttons[1].onclick = () => showDeleteConfirm(marker, data, type);
-            });
-        }
-
-        // ฟังก์ชันลบจุดและข้อมูลจาก Google Sheets (ข้อ 1)
-        // แก้ไขฟังก์ชัน deleteMarker
-        async function deleteMarker(marker, data, type) {
-            const refreshBtn = document.getElementById('btn-refresh');
-            const refreshIcon = document.getElementById('refresh-icon');
-            
-            // ปิดการใช้งานปุ่ม
-            disableRefreshButton();
-            refreshIcon.classList.add('animate-spin');
-            
-            // แสดงแจ้งเตือนว่ากำลังลบ (ฝั่งซ้าย)
-            const deletingMsg = document.createElement('div');
-            deletingMsg.className = 'fixed top-4 left-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-            deletingMsg.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i>กำลังลบข้อมูล...';
-            document.body.appendChild(deletingMsg);
-            
-            const rowKey = data._row_num || data.id;
-            
-            if (!rowKey) {
-                alert("ไม่พบข้อมูลสำหรับลบ");
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                deletingMsg.classList.add('animate-fade-out');
-                setTimeout(() => deletingMsg.remove(), 300);
-                return;
-            }
-            
-            const body = new URLSearchParams();
-            body.append('action', 'delete');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            
-            try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
-                
-                if (res.ok) {
-                    // ซ่อนข้อความ "กำลังลบ"
-                    deletingMsg.classList.add('animate-fade-out');
-                    setTimeout(() => deletingMsg.remove(), 300);
-                    
-                    // แสดงแจ้งเตือนสำเร็จ (ฝั่งซ้าย)
-                    const successMsg = document.createElement('div');
-                    successMsg.className = 'fixed top-4 left-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                    successMsg.innerHTML = '<i data-lucide="check-circle" class="w-5 h-5 inline mr-2"></i>ลบข้อมูลเรียบร้อยแล้ว!';
-                    document.body.appendChild(successMsg);
-                    
-                    setTimeout(() => {
-                        successMsg.classList.add('animate-fade-out');
-                        setTimeout(() => successMsg.remove(), 300);
-                    }, 2000);
-                    
-                    surveyLayers.removeLayer(marker);
-                    await loadExistingData();
-                    
-                    refreshIcon.classList.remove('animate-spin');
-                    refreshBtn.classList.add('refresh-success');
-                    setTimeout(() => {
-                        refreshBtn.classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
-                    console.log("ลบข้อมูลเรียบร้อยแล้ว");
-                } else {
-                    throw new Error("ลบข้อมูลไม่สำเร็จ");
-                }
-            } catch (err) {
-                // ซ่อนข้อความ "กำลังลบ"
-                deletingMsg.classList.add('animate-fade-out');
-                setTimeout(() => deletingMsg.remove(), 300);
-                
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                console.error("Error deleting marker:", err);
-                
-                // แสดงแจ้งเตือนข้อผิดพลาด (ฝั่งซ้าย)
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'fixed top-4 left-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                errorMsg.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 inline mr-2"></i>เกิดข้อผิดพลาดในการลบ!';
-                document.body.appendChild(errorMsg);
-                
-                setTimeout(() => {
-                    errorMsg.classList.add('animate-fade-out');
-                    setTimeout(() => errorMsg.remove(), 300);
-                }, 3000);
-                
-                throw err;
-            }
-        }
-
-        function createCircleMarker(latlng, type, isDraggable = false) {
-            const className = type === 'building' ? 'circle-building' : 'circle-sign';
-            const icon = L.divIcon({
-                className: `circle-marker ${className}`,
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
-            });
-            const marker = L.marker(latlng, {
-                icon: icon,
-                draggable: isDraggable,
-                zIndexOffset: 1000
-            });
-            
-            // เก็บข้อมูลไว้ใน marker สำหรับใช้ในการอัปเดต
-            marker._popupData = null;
-            
-            return marker;
-        }
-
-        function openEditPanel(data, type, marker) {
-            editingMarker = marker;
-            const form = document.getElementById('survey-form');
-            document.getElementById('latlng-display').innerText = data.lat_long;
-            document.getElementById('panel-title').innerText = type === 'building' ? 'รายละเอียดสิ่งปลูกสร้าง' : 'รายละเอียดป้าย';
-            
-            const buildingFields = [
-                { id: 'full_name', label: 'เจ้าของ', type: 'text' },
-                { id: 'address', label: 'ที่อยู่', type: 'text' },
-                { id: 'building_c', label: 'รหัสสิ่งปลูกสร้าง', type: 'text' },
-                { id: 'b_type', label: 'ประเภทสิ่งปลูกสร้าง', type: 'text' },
-                { id: 'b_mat', label: 'วัสดุ', type: 'text' },
-                { id: 'b_year', label: 'อายุ (ปี)', type: 'number' },
-                { id: 'hs_no', label: 'บ้านเลขที่', type: 'text' },
-                { id: 'hs_moo', label: 'หมู่', type: 'text' },
-                { id: 'no_floor', label: 'ชั้น', type: 'number' },
-                { id: 'b_area', label: 'พื้นที่ทั้งหลัง (ตร.ม.)', type: 'number' },
-                { id: 'b_note', label: 'รายละเอียด', type: 'textarea' },
-                { id: 'b_use', label: 'ใช้ประโยชน์', type: 'text' },
-                { id: 'per_use', label: 'การเช่า', type: 'text' },
-                { id: 'buse_floor', label: 'ชั้นที่ใช้', type: 'text' },
-                { id: 'buse_area', label: 'พื้นที่ใช้ (ตร.ม.)', type: 'number' },
-                { id: 'ment_use', label: 'หมายเหตุ', type: 'textarea' },
-                { id: 'full_area', label: 'ใช้ทั้งหลัง', type: 'checkbox' },
-                { id: 'b_use2', label: 'ใช้ประโยชน์ (2)', type: 'text' },
-                { id: 'per_use2', label: 'การเช่า (2)', type: 'text' },
-                { id: 'buse_flor2', label: 'ชั้นที่ใช้ (2)', type: 'text' },
-                { id: 'buse_area2', label: 'พื้นที่ใช้ (2) (ตร.ม.)', type: 'number' },
-                { id: 'ment_use2', label: 'หมายเหตุ (2)', type: 'textarea' },
-                { id: 'full_area2', label: 'ใช้ทั้งหลัง (2)', type: 'checkbox' },
-                { id: 'picture', label: 'ถ่ายรูป', type: 'file' },
-                { id: 'check', label: 'สถานะการตรวจสอบ', type: 'select', options: ['pending', 'verified', 'rejected'] }
-            ];
-            
-            const signFields = [
-                { id: 's_code', label: 'รหัสป้าย', type: 'text' },
-                { id: 's_name', label: 'ชื่อกิจการ', type: 'text' },
-                { id: 's_type', label: 'ประเภทป้าย', type: 'text' },
-                { id: 's_characte', label: 'ลักษณะป้าย', type: 'text' },
-                { id: 's_wide', label: 'กว้าง (ม.)', type: 'number' },
-                { id: 's_length', label: 'ยาว (ม.)', type: 'number' },
-                { id: 'no_side', label: 'จำนวนด้าน', type: 'text' },
-                { id: 's_text', label: 'ข้อความ', type: 'text' },
-                { id: 'comment', label: 'หมายเหตุ', type: 'text' },
-                { id: 'fullname', label: 'เจ้าของ', type: 'text' },
-                { id: 'address', label: 'ที่อยู่', type: 'text' },
-                { id: 'picture', label: 'ถ่ายรูป', type: 'file' }
-            ];
-            
-            const fields = type === 'building' ? buildingFields : signFields;
-            let html = '';
-            
-            fields.forEach(f => {
-                html += `<div class="mb-2">`;
-                html += `<label class="form-label">${f.label}</label>`;
-                
-                if (f.type === 'textarea') {
-                    html += `<textarea name="${f.id}" class="form-input" rows="2">${data[f.id] || ''}</textarea>`;
-                } else if (f.type === 'file') {
-                    html += `<input type="file" name="${f.id}" accept="image/*" capture="camera" class="text-xs w-full mt-1">`;
-                } else if (f.type === 'checkbox') {
-                    const checked = data[f.id] === 'TRUE' || data[f.id] === true ? 'checked' : '';
-                    html += `<input type="checkbox" name="${f.id}" class="mt-1" ${checked}>`;
-                } else if (f.type === 'select') {
-                    html += `<select name="${f.id}" class="form-input">`;
-                    f.options.forEach(opt => {
-                        const selected = data[f.id] === opt ? 'selected' : '';
-                        html += `<option value="${opt}" ${selected}>${opt}</option>`;
-                    });
-                    html += `</select>`;
-                } else {
-                    html += `<input type="${f.type}" name="${f.id}" class="form-input" value="${data[f.id] || ''}">`;
-                }
-                
-                html += `</div>`;
-            });
-            
-            form.innerHTML = html;
-            document.getElementById('side-panel').classList.add('open');
-            marker.closePopup();
-        }
-
-        async function saveSurveyData() {
-            const form = document.getElementById('survey-form');
-            const formData = new FormData(form);
-            
-            // ดึงค่าฟอร์ม
-            const data = {};
-            for (let [key, value] of formData.entries()) {
-                const input = form.querySelector(`[name="${key}"]`);
-                if (input && input.type === 'checkbox') {
-                    data[key] = input.checked ? 'TRUE' : 'FALSE';
-                } else if (input && input.type !== 'file') {
-                    data[key] = value;
-                }
-            }
-            
-            // ดึงพิกัดจากหน้าจอ
-            data.lat_long = document.getElementById('latlng-display').innerText;
-            
-            // จัดการรูปภาพ → base64
-            let imageBase64 = "";
-            const fileInput = form.querySelector('input[type="file"]');
-            if (fileInput && fileInput.files[0]) {
-                const file = fileInput.files[0];
-                const arrayBuffer = await file.arrayBuffer();
-                const bytes = [...new Uint8Array(arrayBuffer)];
-                const binary = bytes.map(b => String.fromCharCode(b)).join('');
-                imageBase64 = `${file.type};base64,${btoa(binary)}`;
-            }
-            
-            // หาประเภท (building หรือ sign)
-            const type = editingMarker._popupData.type;
-            
-            // หาคีย์สำหรับอัปเดต
-            const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
-            
-            if (!rowKey) {
-                alert("ไม่พบข้อมูลสำหรับอัปเดต");
-                return;
-            }
-            
-            // ✅ ปิดหน้าต่างทันทีก่อนอัปโหลด
-            closePanel();
-            
-            // ปิดการใช้งานปุ่มรีโหลด
-            disableRefreshButton();
-            document.getElementById('refresh-icon').classList.add('animate-spin');
-            
-            // แสดงแจ้งเตือนว่ากำลังบันทึก (ฝั่งซ้าย)
-            const savingMsg = document.createElement('div');
-            savingMsg.className = 'fixed top-4 left-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-            savingMsg.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i>กำลังบันทึกข้อมูล...';
-            document.body.appendChild(savingMsg);
-            
-            // ส่งข้อมูลไปยัง Google Sheets
-            const body = new URLSearchParams();
-            body.append('action', 'update');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            body.append('payload', JSON.stringify(data));
-            body.append('image', imageBase64);
-            body.append('fileName', data.building_c || data.s_code || `IMG_${Date.now()}.jpg`);
-            
-            try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
-                    method: 'POST',
-                    body: body
-                });
-                
-                if (res.ok) {
-                    // ซ่อนข้อความ "กำลังบันทึก"
-                    savingMsg.classList.add('animate-fade-out');
-                    setTimeout(() => savingMsg.remove(), 300);
-                    
-                    // แสดงแจ้งเตือนสำเร็จ (ฝั่งซ้าย)
-                    const successMsg = document.createElement('div');
-                    successMsg.className = 'fixed top-4 left-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                    successMsg.innerHTML = '<i data-lucide="check-circle" class="w-5 h-5 inline mr-2"></i>บันทึกข้อมูลเรียบร้อยแล้ว!';
-                    document.body.appendChild(successMsg);
-                    
-                    // ปิดแจ้งเตือนอัตโนมัติหลัง 2 วินาที
-                    setTimeout(() => {
-                        successMsg.classList.add('animate-fade-out');
-                        setTimeout(() => successMsg.remove(), 300);
-                    }, 2000);
-                    
-                    // อัปเดตข้อมูลในป๊อปอัป
-                    editingMarker._popupData = { ...editingMarker._popupData, ...data };
-                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
-                    
-                    // ปุ่มรีโหลดกระพริบเขียว
-                    document.getElementById('refresh-icon').classList.remove('animate-spin');
-                    document.getElementById('btn-refresh').classList.add('refresh-success');
-                    setTimeout(() => {
-                        document.getElementById('btn-refresh').classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
-                    // โหลดข้อมูลใหม่
-                    await loadExistingData();
-                    
-                } else {
-                    throw new Error("บันทึกข้อมูลไม่สำเร็จ");
-                }
-            } catch (err) {
-                // ซ่อนข้อความ "กำลังบันทึก"
-                savingMsg.classList.add('animate-fade-out');
-                setTimeout(() => savingMsg.remove(), 300);
-                
-                document.getElementById('refresh-icon').classList.remove('animate-spin');
-                enableRefreshButton();
-                console.error("Error saving data:", err);
-                
-                // แสดงแจ้งเตือนข้อผิดพลาด (ฝั่งซ้าย)
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'fixed top-4 left-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                errorMsg.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 inline mr-2"></i>เกิดข้อผิดพลาดในการบันทึก!';
-                document.body.appendChild(errorMsg);
-                
-                setTimeout(() => {
-                    errorMsg.classList.add('animate-fade-out');
-                    setTimeout(() => errorMsg.remove(), 300);
-                }, 3000);
-            }
-        }
-
-        function closePanel() { document.getElementById('side-panel').classList.remove('open'); }
-
-        function locateUser() { 
-            map.locate({setView: true, maxZoom: 18}); 
-            map.once('locationfound', (e) => {
-                L.circleMarker(e.latlng, { radius: 8, fillColor: '#2563eb', color: '#fff', weight: 3, fillOpacity: 0.9 }).addTo(map);
-            });
-        }
-        // ตัวแปรเก็บข้อมูลสำหรับการลบ
-        let deleteMarkerData = null;
-        let deleteMarkerType = null;
-        let deleteMarkerRef = null;
-
-        // เปิดหน้าต่างยืนยันการลบ
-        function showDeleteConfirm(marker, data, type) {
-            deleteMarkerRef = marker;
-            deleteMarkerData = data;
-            deleteMarkerType = type;
-            
-            const title = document.getElementById('delete-modal-title');
-            const message = document.getElementById('delete-modal-message');
-            
-            if (type === 'building') {
-                title.textContent = 'ลบสิ่งปลูกสร้าง';
-                message.textContent = 'คุณแน่ใจว่าต้องการลบสิ่งปลูกสร้างนี้? การกระทำนี้ไม่สามารถยกเลิกได้';
-            } else {
-                title.textContent = 'ลบป้าย';
-                message.textContent = 'คุณแน่ใจว่าต้องการลบป้ายนี้? การกระทำนี้ไม่สามารถยกเลิกได้';
-            }
-            
-            document.getElementById('confirm-delete-modal').classList.remove('hidden');
-            document.getElementById('confirm-delete-modal').classList.add('flex');
-        }
-
-        // ปิดหน้าต่างยืนยันการลบ
-        function cancelDelete() {
-            document.getElementById('confirm-delete-modal').classList.add('hidden');
-            deleteMarkerData = null;
-            deleteMarkerType = null;
-            deleteMarkerRef = null;
-        }
-
-        // ยืนยันการลบ
-        async function confirmDeleteAction() {
-            if (!deleteMarkerRef || !deleteMarkerData || !deleteMarkerType) {
-                cancelDelete();
-                return;
-            }
-            
-            // ปิดหน้าต่างยืนยัน
-            document.getElementById('confirm-delete-modal').classList.add('hidden');
-            
-            try {
-                await deleteMarker(deleteMarkerRef, deleteMarkerData, deleteMarkerType);
-            } catch (err) {
-                console.error("Error in delete action:", err);
-            } finally {
-                cancelDelete();
-            }
-        }
-
-        // เปิดหน้าต่างโหมดแก้ไข
-        function showEditModeModal() {
-            document.getElementById('edit-mode-modal').classList.remove('hidden');
-            document.getElementById('edit-mode-modal').classList.add('flex');
-            
-            // ปิดอัตโนมัติหลัง 3 วินาที
-            setTimeout(() => {
-                closeEditModeModal();
-            }, 3000);
-        }
-
-        // ปิดหน้าต่างโหมดแก้ไข
-        function closeEditModeModal() {
-            document.getElementById('edit-mode-modal').classList.add('hidden');
-        }
-
-        // ฟังก์ชันสำหรับแสดง/ซ่อนตาราง
-        function toggleTable() {
-            const panel = document.getElementById('data-table-panel');
-            const btn = document.getElementById('btn-show-table');
-            const icon = document.getElementById('table-icon');
-            
-            panel.classList.toggle('open');
-            
-            if (panel.classList.contains('open')) {
-                btn.innerHTML = '<i data-lucide="x" class="w-6 h-6 text-red-600"></i>';
-            } else {
-                btn.innerHTML = '<i data-lucide="table" class="w-6 h-6 text-blue-600"></i>';
-            }
-            
-            lucide.createIcons();
-        }
-
-        // ฟังก์ชันสลับแท็บตาราง
-        function switchTableTab(type) {
-            // เปลี่ยนแท็บ
-            document.querySelectorAll('.table-tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            // แสดงตารางที่เลือก
-            document.getElementById('building-table-container').classList.toggle('hidden', type !== 'building');
-            document.getElementById('sign-table-container').classList.toggle('hidden', type !== 'sign');
-        }
-
-        // ฟังก์ชันซูมไปที่ตำแหน่ง
-        function zoomToLocation(latlng, zoomLevel = 18) {
-            map.setView(latlng, zoomLevel);
-            
-            // สร้างเอฟเฟกต์กระพริบ
-            const blinkMarker = L.circleMarker(latlng, {
-                radius: 15,
-                fillColor: '#ef4444',
-                color: '#fff',
-                weight: 3,
-                fillOpacity: 0.8,
-                opacity: 1
-            }).addTo(map);
-            
-            // กระพริบ 3 ครั้ง
-            let count = 0;
-            const blinkInterval = setInterval(() => {
-                blinkMarker.setStyle({
-                    opacity: blinkMarker.options.opacity === 1 ? 0 : 1,
-                    fillOpacity: blinkMarker.options.fillOpacity === 0.8 ? 0 : 0.8
-                });
-                count++;
-                if (count >= 6) {
-                    clearInterval(blinkInterval);
-                    map.removeLayer(blinkMarker);
-                }
-            }, 300);
-        }
-
-        // ฟังก์ชันสร้างแถวข้อมูลสิ่งปลูกสร้าง
-        function renderBuildingTable() {
-            const tbody = document.getElementById('building-table-body');
-            
-            if (allBuildings.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลสิ่งปลูกสร้าง</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = allBuildings.map((building, index) => {
-                if (!building.lat_long) return '';
-                
-                const [lat, lng] = building.lat_long.split(',').map(Number);
-                const statusClass = building.check === 'verified' ? 'status-verified' : 
-                                   building.check === 'rejected' ? 'status-rejected' : 'status-pending';
-                const statusText = building.check === 'verified' ? 'ตรวจสอบแล้ว' : 
-                                  building.check === 'rejected' ? 'ปฏิเสธ' : 'รอดำเนินการ';
-                
-                return `
-                    <tr>
-                        <td><span class="marker-icon marker-building"></span></td>
-                        <td class="font-medium">${building.building_c || '-'}</td>
-                        <td>${building.full_name || '-'}</td>
-                        <td>${building.address || '-'}</td>
-                        <td>${building.b_type || '-'}</td>
-                        <td>${building.b_area || '-'}</td>
-                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td>
-                            <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
-                                <i data-lucide="locate" class="w-3 h-3 inline"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-            
-            lucide.createIcons();
-        }
-        // ============================================
-        // ฟังก์ชันเมนูฟันเฟือง
-        // ============================================
-
-        /**
-         * เปิด/ปิดเมนูฟันเฟือง
-         */
-        function toggleSettingsMenu() {
-          const menu = document.getElementById('settings-menu');
-          const icon = document.getElementById('settings-icon');
-          const badge = document.getElementById('settings-badge');
-          
-          if (menu.classList.contains('hidden')) {
-            // เปิดเมนู - ปุ่มย่อยเลื่อนลงมาทีละปุ่ม
-            menu.classList.remove('hidden');
-            icon.classList.add('animate-spin');
-            
-            // ซ่อนจุดแจ้งเตือน (ถ้ามี)
-            badge.classList.add('hidden');
-            
-            // แอนิเมชันเลื่อนลงมาทีละปุ่ม
-            setTimeout(() => {
-              const buttons = menu.querySelectorAll('button');
-              buttons.forEach((btn, index) => {
-                setTimeout(() => {
-                  btn.style.transform = 'translateY(0)';
-                  btn.style.opacity = '1';
-                }, index * 100);
-              });
-            }, 100);
-            
-            // ปิดเมนูอัตโนมัติเมื่อคลิกที่อื่น
-            setTimeout(() => {
-              document.addEventListener('click', closeSettingsMenuOnClickOutside);
-            }, 100);
-            
-          } else {
-            // ปิดเมนู
-            closeSettingsMenu();
-          }
-        }
-
-        /**
-         * ปิดเมนูเมื่อคลิกที่อื่น
-         */
-        function closeSettingsMenuOnClickOutside(e) {
-          const settingsBtn = document.getElementById('btn-settings');
-          const settingsMenu = document.getElementById('settings-menu');
-          
-          if (!settingsBtn.contains(e.target) && !settingsMenu.contains(e.target)) {
-            closeSettingsMenu();
-            document.removeEventListener('click', closeSettingsMenuOnClickOutside);
-          }
-        }
-
-        /**
-         * ปิดเมนู
-         */
-        function closeSettingsMenu() {
-          const menu = document.getElementById('settings-menu');
-          const icon = document.getElementById('settings-icon');
-          
-          // แอนิเมชันเลื่อนขึ้นไป
-          const buttons = menu.querySelectorAll('button');
-          buttons.forEach((btn, index) => {
-            setTimeout(() => {
-              btn.style.transform = 'translateY(-20px)';
-              btn.style.opacity = '0';
-            }, (buttons.length - index - 1) * 50);
-          });
-          
-          setTimeout(() => {
-            menu.classList.add('hidden');
-            icon.classList.remove('animate-spin');
-          }, buttons.length * 50 + 100);
-        }
-
-        /**
-         * ปุ่ม 1: ส่งออกแผนที่สิ่งปลูกสร้าง (GeoJSON)
-         */
-        async function exportBuildingGeoJSON() {
-          closeSettingsMenu();
-          
-          // แสดงข้อความแจ้งเตือน
-          showNotification('กำลังเตรียมข้อมูลสิ่งปลูกสร้าง...', 'info');
-          
-          try {
-            // ดึงข้อมูลจากเซิร์ฟเวอร์
-            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=exportGeoJSON&type=building`);
-            const geojsonData = await res.json();
-            
-            if (geojsonData.type === 'FeatureCollection') {
-              // สร้าง Blob และดาวน์โหลดไฟล์
-              const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { 
-                type: 'application/geo+json' 
-              });
-              
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `buildings_${new Date().toISOString().slice(0,10)}.geojson`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
-              
-              showNotification('ดาวน์โหลดไฟล์สิ่งปลูกสร้างสำเร็จ!', 'success');
-            } else {
-              throw new Error('ข้อมูลไม่ถูกต้อง');
-            }
-          } catch (err) {
-            console.error('Error exporting buildings:', err);
-            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
-          }
-        }
-
-        /**
-         * ปุ่ม 2: ส่งออกแผนที่ป้าย (GeoJSON)
-         */
-        async function exportSignGeoJSON() {
-          closeSettingsMenu();
-          
-          showNotification('กำลังเตรียมข้อมูลป้าย...', 'info');
-          
-          try {
-            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=exportGeoJSON&type=sign`);
-            const geojsonData = await res.json();
-            
-            if (geojsonData.type === 'FeatureCollection') {
-              const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { 
-                type: 'application/geo+json' 
-              });
-              
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `signs_${new Date().toISOString().slice(0,10)}.geojson`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
-              
-              showNotification('ดาวน์โหลดไฟล์ป้ายสำเร็จ!', 'success');
-            } else {
-              throw new Error('ข้อมูลไม่ถูกต้อง');
-            }
-          } catch (err) {
-            console.error('Error exporting signs:', err);
-            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
-          }
-        }
-
-        /**
-         * ปุ่ม 3: โหลดรูปสิ่งปลูกสร้างจากโฟลเดอร์ Google Drive
-         */
-        async function loadBuildingImages() {
-          closeSettingsMenu();
-          
-          showNotification('กำลังโหลดรูปภาพสิ่งปลูกสร้าง...', 'info');
-          
-          try {
-            // ดึงข้อมูลสิ่งปลูกสร้างทั้งหมด
-            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
-            const data = await res.json();
-            const buildings = data.buildings || [];
-            
-            // กรองเฉพาะที่มีรูปภาพ
-            const buildingsWithImages = buildings.filter(b => b.image && b.image.trim() !== '');
-            
-            if (buildingsWithImages.length === 0) {
-              showNotification('ไม่พบรูปภาพสิ่งปลูกสร้าง', 'warning');
-              return;
-            }
-            
-            // แสดงแกลเลอรี่รูปภาพ
-            showImageGallery(buildingsWithImages, 'building');
-            
-          } catch (err) {
-            console.error('Error loading building images:', err);
-            showNotification('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
-          }
-        }
-
-        /**
-         * ปุ่ม 4: โหลดรูปป้ายจากโฟลเดอร์ Google Drive
-         */
-        async function loadSignImages() {
-          closeSettingsMenu();
-          
-          showNotification('กำลังโหลดรูปภาพป้าย...', 'info');
-          
-          try {
-            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
-            const data = await res.json();
-            const signs = data.signs || [];
-            
-            const signsWithImages = signs.filter(s => s.picture && s.picture.trim() !== '');
-            
-            if (signsWithImages.length === 0) {
-              showNotification('ไม่พบรูปภาพป้าย', 'warning');
-              return;
-            }
-            
-            showImageGallery(signsWithImages, 'sign');
-            
-          } catch (err) {
-            console.error('Error loading sign images:', err);
-            showNotification('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
-          }
-        }
-
-        /**
-         * แสดงแกลเลอรี่รูปภาพ
-         */
-        function showImageGallery(items, type) {
-          // สร้างหน้าต่างแกลเลอรี่
-          const galleryDiv = document.createElement('div');
-          galleryDiv.id = 'image-gallery-modal';
-          galleryDiv.className = 'fixed inset-0 bg-black/90 z-[3000] flex flex-col p-4 overflow-hidden';
-          galleryDiv.innerHTML = `
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-white text-xl font-bold">
-                ${type === 'building' ? 'รูปภาพสิ่งปลูกสร้าง' : 'รูปภาพป้าย'} (${items.length} รูป)
-              </h3>
-              <button onclick="closeImageGallery()" class="text-white hover:text-gray-300 transition">
-                <i data-lucide="x" class="w-8 h-8"></i>
-              </button>
-            </div>
-            <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 flex-1 overflow-y-auto">
-              ${items.map((item, index) => `
-                <div class="relative group cursor-pointer" onclick="openImageViewer(${index}, '${type}')">
-                  <img src="${item.image || item.picture}" 
-                       alt="รูปภาพ ${index + 1}" 
-                       class="w-full h-32 object-cover rounded-lg hover:opacity-75 transition"
-                       onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
-                  <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">ดูรูปใหญ่</span>
-                  </div>
-                  <div class="mt-1 text-xs text-white truncate">
-                    ${type === 'building' ? (item.building_c || item.full_name || '-') : (item.s_code || item.s_name || '-')}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            <div class="mt-4 text-center">
-              <button onclick="closeImageGallery()" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition">
-                ปิด
-              </button>
-            </div>
-          `;
-          
-          document.body.appendChild(galleryDiv);
-          lucide.createIcons();
-        }
-
-        /**
-         * เปิดดูรูปภาพขนาดใหญ่
-         */
-        function openImageViewer(index, type) {
-          // ดึงข้อมูลจากหน้าต่างแกลเลอรี่
-          const gallery = document.getElementById('image-gallery-modal');
-          const items = type === 'building' ? allBuildings.filter(b => b.image) : allSigns.filter(s => s.picture);
-          const item = items[index];
-          
-          if (!item) return;
-          
-          // สร้างหน้าต่างดูรูปใหญ่
-          const viewerDiv = document.createElement('div');
-          viewerDiv.id = 'image-viewer-modal';
-          viewerDiv.className = 'fixed inset-0 bg-black/95 z-[3001] flex items-center justify-center p-4';
-          viewerDiv.onclick = (e) => {
-            if (e.target === viewerDiv) closeImageViewer();
-          };
-          viewerDiv.innerHTML = `
-            <div class="relative max-w-4xl w-full">
-              <img src="${item.image || item.picture}" 
-                   alt="รูปภาพ" 
-                   class="w-full max-h-[80vh] object-contain rounded-lg"
-                   onerror="this.src='https://via.placeholder.com/800x600?text=No+Image'">
-              <div class="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-3 rounded-lg">
-                <p class="font-bold">${type === 'building' ? 'สิ่งปลูกสร้าง:' : 'ป้าย:'} ${item.building_c || item.s_code || '-'}</p>
-                <p class="text-sm">${item.full_name || item.s_name || ''}</p>
-                <p class="text-xs mt-1">${item.address || item.comment || ''}</p>
-              </div>
-              <button onclick="closeImageViewer()" class="absolute top-4 right-4 text-white hover:text-gray-300 transition">
-                <i data-lucide="x" class="w-8 h-8"></i>
-              </button>
-              <button onclick="downloadImage('${item.image || item.picture}', '${item.building_c || item.s_code || 'image'}')" 
-                      class="absolute top-4 left-4 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition">
-                <i data-lucide="download" class="w-5 h-5"></i>
-              </button>
-            </div>
-          `;
-          
-          document.body.appendChild(viewerDiv);
-          lucide.createIcons();
-        }
-
-        /**
-         * ปิดหน้าต่างดูรูปใหญ่
-         */
-        function closeImageViewer() {
-          const viewer = document.getElementById('image-viewer-modal');
-          if (viewer) viewer.remove();
-        }
-
-        /**
-         * ปิดแกลเลอรี่รูปภาพ
-         */
-        function closeImageGallery() {
-          const gallery = document.getElementById('image-gallery-modal');
-          if (gallery) gallery.remove();
-          closeImageViewer(); // ปิดหน้าต่างดูรูปใหญ่ด้วย (ถ้ามี)
-        }
-
-        /**
-         * ดาวน์โหลดรูปภาพ
-         */
-        function downloadImage(url, filename) {
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `${filename}_${Date.now()}.jpg`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
-
-        /**
-         * แสดงแจ้งเตือน
-         */
-        function showNotification(message, type = 'info') {
-          const colors = {
-            info: 'bg-blue-500',
-            success: 'bg-green-500',
-            error: 'bg-red-500',
-            warning: 'bg-yellow-500'
-          };
-          
-          const icons = {
-            info: 'info',
-            success: 'check-circle',
-            error: 'alert-circle',
-            warning: 'alert-triangle'
-          };
-          
-          const notification = document.createElement('div');
-          notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in`;
-          notification.innerHTML = `
-            <i data-lucide="${icons[type]}" class="w-5 h-5 inline mr-2"></i>
-            ${message}
-          `;
-          
-          document.body.appendChild(notification);
-          lucide.createIcons();
-          
-          setTimeout(() => {
-            notification.classList.add('animate-fade-out');
-            setTimeout(() => notification.remove(), 300);
-          }, 3000);
-        }
-        /**
-         * แสดงมาร์กเกอร์ทั้งหมด (สำหรับข้อมูลน้อย)
-         */
-        function renderAllMarkers() {
-          allBuildings.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
-            setupMarkerPopup(m, r, 'building');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
-          
-          allSigns.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
-            setupMarkerPopup(m, r, 'sign');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
-        }
-
-        /**
-         * อัปเดตมาร์กเกอร์เฉพาะในมุมมองปัจจุบัน (สำหรับข้อมูลจำนวนมาก)
-         */
-        function updateVisibleMarkers() {
-          surveyLayers.clearLayers();
-          const bounds = map.getBounds();
-          
-          // แสดงเฉพาะสิ่งปลูกสร้างในมุมมอง
-          allBuildings.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const latLng = L.latLng(coords[0], coords[1]);
-            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
-            
-            const m = createCircleMarker(latLng, 'building', isEditMode);
-            setupMarkerPopup(m, r, 'building');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
-          
-          // แสดงเฉพาะป้ายในมุมมอง
-          allSigns.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const latLng = L.latLng(coords[0], coords[1]);
-            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
-            
-            const m = createCircleMarker(latLng, 'sign', isEditMode);
-            setupMarkerPopup(m, r, 'sign');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
-        }
-
-        /**
-         * เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
-         */
-        function enableMarkerDragging(marker, data) {
-          if (!isEditMode) return;
-          marker.dragging.enable();
-          marker.on('dragend', async (e) => {
+    function enableMarkerDragging(marker, data) {
+        if (!isEditMode) return;
+        marker.dragging.enable();
+        marker.on('dragend', async (e) => {
             const newLatLng = e.target.getLatLng();
             const marker = e.target;
             const data = marker._popupData;
-            if (data) await updateMarkerPosition(marker, data, newLatLng);
-          });
-        }
-        // ฟังก์ชันสร้างแถวข้อมูลป้าย
-        function renderSignTable() {
-            const tbody = document.getElementById('sign-table-body');
-            
-            if (allSigns.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลป้าย</td></tr>';
-                return;
+            if (data) {
+                await updateMarkerPosition(marker, data, newLatLng);
             }
-            
-            tbody.innerHTML = allSigns.map((sign, index) => {
-                if (!sign.lat_long) return '';
-                
-                const [lat, lng] = sign.lat_long.split(',').map(Number);
-                
-                return `
-                    <tr>
-                        <td><span class="marker-icon marker-sign"></span></td>
-                        <td class="font-medium">${sign.s_code || '-'}</td>
-                        <td>${sign.s_name || '-'}</td>
-                        <td>${sign.s_type || '-'}</td>
-                        <td>${sign.s_wide || '-'}</td>
-                        <td>${sign.s_length || '-'}</td>
-                        <td>${sign.s_text || '-'}</td>
-                        <td>
-                            <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
-                                <i data-lucide="locate" class="w-3 h-3 inline"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-            
-            lucide.createIcons();
-        }
+        });
+    }
 
-        async function loadExistingData() {
-          try {
+    async function updateMarkerPosition(marker, data, newLatLng) {
+        // Show temporary saving indicator
+        const savingMsg = document.createElement('div');
+        savingMsg.className = 'fixed top-4 left-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
+        savingMsg.textContent = 'กำลังอัปเดตตำแหน่ง...';
+        document.body.appendChild(savingMsg);
+
+        try {
+            const formData = new FormData();
+            formData.append('action', 'updatePosition');
+            formData.append('id', data.id || data._row_num); // Use appropriate key
+            formData.append('type', data.type);
+            formData.append('lat', newLatLng.lat.toFixed(6));
+            formData.append('lng', newLatLng.lng.toFixed(6));
+
+            const res = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: formData });
+            const result = await res.json();
+
+            if (result.result === 'success') {
+                // Update the stored data
+                if (data.type === 'building') {
+                    const index = allBuildings.findIndex(b => (b.id === data.id || b._row_num === data._row_num));
+                    if (index !== -1) allBuildings[index].lat_long = `${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
+                } else { // sign
+                    const index = allSigns.findIndex(s => (s.id === data.id || s._row_num === data._row_num));
+                    if (index !== -1) allSigns[index].lat_long = `${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
+                }
+
+                // Update marker's stored data reference
+                marker._popupData.lat_long = `${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
+
+                // Update popup content
+                setupMarkerPopup(marker, marker._popupData, data.type);
+
+                // Show success notification
+                savingMsg.classList.remove('animate-fade-in');
+                savingMsg.classList.add('animate-fade-out');
+                setTimeout(() => savingMsg.remove(), 300);
+
+                const successMsg = document.createElement('div');
+                successMsg.className = 'fixed top-4 left-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
+                successMsg.innerHTML = '<i data-lucide="check-circle" class="w-5 h-5 inline mr-2"></i>อัปเดตตำแหน่งสำเร็จ!';
+                document.body.appendChild(successMsg);
+                lucide.createIcons({ el: successMsg }); // Icon for success message
+                setTimeout(() => {
+                    successMsg.classList.add('animate-fade-out');
+                    setTimeout(() => successMsg.remove(), 300);
+                }, 2000);
+
+                // Reload table to reflect changes
+                renderBuildingTable();
+                renderSignTable();
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (err) {
+            console.error('Error updating marker position:', err);
+            savingMsg.remove();
+            showNotification(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+        }
+    }
+
+
+    // --- Tool Activation ---
+    function deactivateTools() {
+        activeTool = null;
+        document.getElementById('btn-building').classList.remove('active-tool');
+        document.getElementById('btn-sign').classList.remove('active-tool');
+
+        const crosshair = document.getElementById('crosshair');
+        const addTrigger = document.getElementById('add-trigger-container');
+        const overlay = document.getElementById('confirm-overlay');
+
+        // Start slide down animation
+        crosshair.classList.remove('visible');
+        addTrigger.classList.remove('visible');
+        overlay.classList.remove('active');
+
+        // After animation completes, hide elements properly
+        setTimeout(() => {
+            crosshair.classList.add('hidden');
+            addTrigger.classList.add('hidden');
+            overlay.classList.add('hidden');
+        }, 400); // Matches animation duration
+    }
+
+    function activateTool(tool) {
+        isEditMode = false; // Turn off edit mode when activating capture tools
+        document.getElementById('btn-edit').classList.remove('active-edit');
+        surveyLayers.eachLayer(l => l.dragging && l.dragging.disable());
+
+        if (activeTool === tool) {
+            // Deactivate if the same tool is clicked again
+            deactivateTools();
+        } else {
+            // Activate new tool
+            activeTool = tool;
+            document.getElementById('btn-building').classList.toggle('active-tool', tool === 'building');
+            document.getElementById('btn-sign').classList.toggle('active-tool', tool === 'sign');
+
+            const crosshair = document.getElementById('crosshair');
+            const addTrigger = document.getElementById('add-trigger-container');
+
+            // Remove hidden class and add visible class with animation
+            crosshair.classList.remove('hidden');
+            addTrigger.classList.remove('hidden');
+            // Force browser to recalculate before starting animation
+            void crosshair.offsetWidth;
+            void addTrigger.offsetWidth;
+
+            // Start slide up animation
+            crosshair.classList.add('visible');
+            addTrigger.classList.add('visible');
+
+            // Hide confirm overlay if present
+            document.getElementById('confirm-overlay').classList.add('hidden');
+        }
+    }
+
+
+    // --- Capture Flow ---
+    function showConfirmOverlay() {
+        const overlay = document.getElementById('confirm-overlay');
+        const btn = document.getElementById('btn-confirm-action');
+        const text = document.getElementById('confirm-text');
+
+        if (activeTool === 'building') {
+            btn.style.backgroundColor = '#f97316';
+            text.innerText = "ยืนยันเพิ่มสิ่งปลูกสร้าง?";
+        } else { // sign
+            btn.style.backgroundColor = '#22c55e';
+            text.innerText = "ยืนยันเพิ่มป้าย?";
+        }
+        overlay.classList.remove('hidden');
+        overlay.classList.add('active'); // Makes it interactive
+    }
+
+    async function confirmCapture() {
+        // Calculate coordinates based on crosshair position (slightly higher)
+        const containerPoint = L.point(map.getSize().x / 2, map.getSize().y * 0.35); // 35% from top (~where crosshair is)
+        const latlng = map.containerPointToLatLng(containerPoint);
+
+        document.getElementById('confirm-overlay').classList.remove('active');
+        document.getElementById('confirm-overlay').classList.add('hidden');
+
+        const tempMarker = createCircleMarker(latlng, activeTool);
+        tempMarker.addTo(surveyLayers);
+        await backgroundUpload(latlng, activeTool, tempMarker); // Wait for upload to complete potentially
+    }
+
+    async function backgroundUpload(latlng, type, marker) {
+        const refreshBtn = document.getElementById('btn-refresh');
+        const refreshIcon = document.getElementById('refresh-icon');
+
+        // Disable refresh button during upload
+        refreshBtn.disabled = true;
+        refreshBtn.style.opacity = '0.5';
+        refreshBtn.style.cursor = 'not-allowed';
+        refreshIcon.classList.add('animate-spin');
+
+        // Show temporary saving indicator
+        const savingMsg = document.createElement('div');
+        savingMsg.className = 'fixed top-4 left-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
+        savingMsg.textContent = type === 'building' ? 'กำลังบันทึกสิ่งปลูกสร้าง...' : 'กำลังบันทึกป้าย...';
+        document.body.appendChild(savingMsg);
+
+        try {
+            const formData = new FormData();
+            formData.append('action', 'addData');
+            formData.append('type', type);
+            formData.append('lat', latlng.lat.toFixed(6));
+            formData.append('lng', latlng.lng.toFixed(6));
+            // Add other default/fetchable data as needed, e.g., user info from login
+
+            const res = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: formData });
+            const result = await res.json();
+
+            if (result.result === 'success') {
+                // Update local data store
+                const newRow = {
+                    id: result.id, // Assuming script returns new ID
+                    lat_long: `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`,
+                    owner_name: 'รอการกรอก', // Default value
+                    // Add other default values as needed
+                };
+                if (type === 'building') {
+                    allBuildings.push(newRow);
+                } else {
+                    allSigns.push(newRow);
+                }
+
+                // Setup popup for the temporary marker using new data
+                setupMarkerPopup(marker, newRow, type);
+                marker._popupData = {...newRow, type: type}; // Update internal reference
+
+                // Remove temporary marker style, make permanent
+                const isBuilding = type === 'building';
+                const color = isBuilding ? '#f97316' : '#22c55e';
+                marker.setStyle({ color: color, fillColor: color });
+
+                // Show success notification
+                savingMsg.classList.remove('animate-fade-in');
+                savingMsg.classList.add('animate-fade-out');
+                setTimeout(() => savingMsg.remove(), 300);
+
+                const successMsg = document.createElement('div');
+                successMsg.className = 'fixed top-4 left-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
+                successMsg.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 inline mr-2"></i>เพิ่ม${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'} สำเร็จ!`;
+                document.body.appendChild(successMsg);
+                lucide.createIcons({ el: successMsg });
+                setTimeout(() => {
+                    successMsg.classList.add('animate-fade-out');
+                    setTimeout(() => successMsg.remove(), 300);
+                }, 2000);
+
+                // Reload table
+                renderBuildingTable();
+                renderSignTable();
+
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (err) {
+            console.error(`Error uploading ${type}:`, err);
+            // Remove temporary marker on error
+            map.removeLayer(marker);
+            savingMsg.remove(); // Remove saving msg
+            showNotification(`เพิ่ม${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'} ล้มเหลว: ${err.message}`, 'error');
+        } finally {
+            // Re-enable refresh button
+            refreshBtn.disabled = false;
+            refreshBtn.style.opacity = '1';
+            refreshBtn.style.cursor = 'pointer';
+            refreshIcon.classList.remove('animate-spin');
+        }
+    }
+
+
+    // --- Data Loading & Table Rendering ---
+    async function loadExistingData() {
+        showLoading(true);
+        try {
             const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
             const data = await res.json();
-            surveyLayers.clearLayers();
-            
-            // เก็บข้อมูลไว้สำหรับตาราง
+            surveyLayers.clearLayers(); // Clear existing markers
+
+            // Store data globally
             allBuildings = data.buildings || [];
             allSigns = data.signs || [];
-            
-            // แสดงข้อมูลในตาราง
+
+            // Render tables
             renderBuildingTable();
             renderSignTable();
-            
-            // ✅ สร้าง marker บนแผนที่ด้วยระบบกรองตามจำนวนข้อมูล
-            const totalMarkers = allBuildings.length + allSigns.length;
-            const useOptimizedRendering = totalMarkers > 200;
 
-            if (useOptimizedRendering) {
-              // โหมดข้อมูลจำนวนมาก: แสดงเฉพาะมาร์กเกอร์ในมุมมอง
-              map.off('moveend', updateVisibleMarkers);
-              map.off('zoomend', updateVisibleMarkers);
-              map.on('moveend', updateVisibleMarkers);
-              map.on('zoomend', updateVisibleMarkers);
-              updateVisibleMarkers(); // แสดงมาร์กเกอร์ในมุมมองทันที
-              
-            } else {
-              // โหมดข้อมูลน้อย: แสดงมาร์กเกอร์ทั้งหมด
-              allBuildings.forEach(r => {
+            // Create markers on map (simple version, consider optimization for large datasets later if needed)
+            allBuildings.forEach(r => {
                 if (!r.lat_long) return;
                 const coords = r.lat_long.split(',').map(Number);
                 if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
@@ -1928,9 +1175,9 @@
                 setupMarkerPopup(m, r, 'building');
                 m.addTo(surveyLayers);
                 if (isEditMode) enableMarkerDragging(m, r);
-              });
-              
-              allSigns.forEach(r => {
+            });
+
+            allSigns.forEach(r => {
                 if (!r.lat_long) return;
                 const coords = r.lat_long.split(',').map(Number);
                 if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
@@ -1938,60 +1185,495 @@
                 setupMarkerPopup(m, r, 'sign');
                 m.addTo(surveyLayers);
                 if (isEditMode) enableMarkerDragging(m, r);
-              });
-            }
-          } catch(e) {
-            console.error("Error loading data:", e);
-          }
-        }
-
-        // แก้ไขฟังก์ชัน refreshData
-        function refreshData() {
-            const refreshBtn = document.getElementById('btn-refresh');
-            const refreshIcon = document.getElementById('refresh-icon');
-            
-            // ปิดการใช้งานปุ่ม
-            disableRefreshButton();
-            refreshIcon.classList.add('animate-spin');
-            
-            loadExistingData().finally(() => {
-                setTimeout(() => {
-                    refreshIcon.classList.remove('animate-spin');
-                    enableRefreshButton();
-                }, 1000);
             });
+
+        } catch(e) {
+            console.error("Error loading data:", e);
+            showNotification('โหลดข้อมูลล้มเหลว: ' + e.message, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function renderBuildingTable() {
+        const tbody = document.getElementById('building-table-body');
+        const thead = document.getElementById('building-table-header');
+        const shouldShow = currentTypeFilter === 'building';
+
+        // Show/hide table container
+        document.getElementById('data-table-panel').classList.toggle('hidden', !shouldShow);
+        document.getElementById('sign-table-container').classList.toggle('hidden', shouldShow);
+
+        if (!shouldShow) return; // Don't render if not active
+
+        if (allBuildings.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลสิ่งปลูกสร้าง</td></tr>';
+            thead.innerHTML = '<th>ลำดับ</th><th>เลขที่</th><th>ชื่อเจ้าของ</th><th>พิกัด</th><th>ดำเนินการ</th>';
+            return;
         }
 
-        window.onload = () => {
-            initMap();
-            lucide.createIcons();
-            loadExistingData();
-        };
-        // ลงทะเบียน Service Worker
-        if ('serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js')
-              .then(reg => console.log('Service Worker registered', reg))
-              .catch(err => console.log('Service Worker registration failed', err));
-          });
+        // Define headers (adjust based on your data structure)
+        thead.innerHTML = '<th>ลำดับ</th><th>เลขที่</th><th>ชื่อเจ้าของ</th><th>พิกัด</th><th>ดำเนินการ</th>';
+
+        tbody.innerHTML = allBuildings.map((building, index) => {
+            if (!building.lat_long) return ''; // Skip invalid entries
+            const coords = building.lat_long.split(',');
+            const lat = parseFloat(coords[0]);
+            const lng = parseFloat(coords[1]);
+            if (isNaN(lat) || isNaN(lng)) return ''; // Skip invalid coordinates
+
+            return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${building.b_number || ''}</td>
+                <td>${building.owner_name || ''}</td>
+                <td>${building.lat_long}</td>
+                <td>
+                    <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))"><i data-lucide="locate" class="w-3 h-3 inline"></i></button>
+                    <button class="zoom-btn ml-1" onclick="openEditPanel('building', ${building.id || building._row_num})"><i data-lucide="edit" class="w-3 h-3 inline"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Re-initialize icons after table update
+        lucide.createIcons();
+    }
+
+    function renderSignTable() {
+        const tbody = document.getElementById('sign-table-body');
+        const thead = document.getElementById('sign-table-header');
+        const shouldShow = currentTypeFilter === 'sign';
+
+        // Show/hide table container
+        document.getElementById('data-table-panel').classList.toggle('hidden', !shouldShow);
+        document.getElementById('sign-table-container').classList.toggle('hidden', !shouldShow);
+
+        if (!shouldShow) return; // Don't render if not active
+
+        if (allSigns.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-500">ไม่มีข้อมูลป้าย</td></tr>';
+            thead.innerHTML = '<th>ลำดับ</th><th>ชื่อป้าย</th><th>รายละเอียด</th><th>พิกัด</th><th>ดำเนินการ</th>';
+            return;
         }
-          
-        // แจ้งเตือนให้ติดตั้งแอป (ตัวอย่าง)
-        window.addEventListener('beforeinstallprompt', (e) => {
-          e.preventDefault();
-          window.deferredPrompt = e;
-            
-          // สร้างปุ่มแนะนำให้ติดตั้ง (ปรับตามความต้องการ)
-          setTimeout(() => {
-            if (confirm('ติดตั้งแอปสำรวจโนนไทยลงหน้าจอหลักเพื่อใช้งานแบบเต็มหน้าจอ?')) {
-              window.deferredPrompt.prompt();
-              window.deferredPrompt.userChoice.then(() => {
-                window.deferredPrompt = null;
-              });
+
+        // Define headers (adjust based on your data structure)
+        thead.innerHTML = '<th>ลำดับ</th><th>ชื่อป้าย</th><th>รายละเอียด</th><th>พิกัด</th><th>ดำเนินการ</th>';
+
+        tbody.innerHTML = allSigns.map((sign, index) => {
+             if (!sign.lat_long) return ''; // Skip invalid entries
+            const coords = sign.lat_long.split(',');
+            const lat = parseFloat(coords[0]);
+            const lng = parseFloat(coords[1]);
+            if (isNaN(lat) || isNaN(lng)) return ''; // Skip invalid coordinates
+
+            return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${sign.sign_name || ''}</td>
+                <td>${sign.description || ''}</td>
+                <td>${sign.lat_long}</td>
+                <td>
+                    <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))"><i data-lucide="locate" class="w-3 h-3 inline"></i></button>
+                     <button class="zoom-btn ml-1" onclick="openEditPanel('sign', ${sign.id || sign._row_num})"><i data-lucide="edit" class="w-3 h-3 inline"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Re-initialize icons after table update
+        lucide.createIcons();
+    }
+
+    // --- UI Interactions ---
+    function zoomToLocation(latlng, zoomLevel = 18) {
+        map.setView(latlng, zoomLevel);
+
+        // Create blink effect
+        const blinkMarker = L.circleMarker(latlng, {
+            radius: 15,
+            fillColor: '#ef4444',
+            color: '#fff',
+            weight: 3,
+            fillOpacity: 0.8,
+            opacity: 1
+        }).addTo(map);
+
+        let count = 0;
+        const blinkInterval = setInterval(() => {
+            blinkMarker.setStyle({
+                opacity: blinkMarker.options.opacity === 1 ? 0 : 1,
+                fillOpacity: blinkMarker.options.fillOpacity === 0.8 ? 0 : 0.8
+            });
+            count++;
+            if (count >= 6) { // 3 blinks (on/off/on/off/on/off)
+                clearInterval(blinkInterval);
+                map.removeLayer(blinkMarker);
             }
-          }, 3000);
-        });
-    </script>
-</body>
+        }, 300);
+    }
 
+    function toggleEditMode() {
+        isEditMode = !isEditMode;
+        if (isEditMode) {
+            activeTool = null; // Turn off capture tools
+            document.getElementById('btn-building').classList.remove('active-tool');
+            document.getElementById('btn-sign').classList.remove('active-tool');
+            document.getElementById('btn-edit').classList.add('active-edit');
+            // Enable dragging for all existing markers
+            surveyLayers.eachLayer(layer => {
+                if (layer instanceof L.CircleMarker) {
+                    enableMarkerDragging(layer, layer._popupData);
+                }
+            });
+            showEditModeModal();
+        } else {
+            document.getElementById('btn-edit').classList.remove('active-edit');
+            surveyLayers.eachLayer(l => l.dragging && l.dragging.disable());
+        }
+        // Reload markers/data to reflect draggability
+        loadExistingData();
+    }
+
+    function showEditModeModal() {
+        document.getElementById('edit-mode-modal').style.display = 'block';
+    }
+
+    function hideEditModeModal() {
+        document.getElementById('edit-mode-modal').style.display = 'none';
+    }
+
+    function openEditPanel(type, rowId) {
+         // Find the data object
+         let dataObj = null;
+         let dataArray = null;
+         if (type === 'building') {
+             dataObj = allBuildings.find(b => (b.id === rowId || b._row_num === rowId));
+             dataArray = allBuildings;
+         } else { // sign
+             dataObj = allSigns.find(s => (s.id === rowId || s._row_num === rowId));
+             dataArray = allSigns;
+         }
+
+         if (!dataObj) {
+             showNotification('ไม่พบข้อมูล', 'error');
+             return;
+         }
+
+         const panel = document.getElementById('side-panel');
+         const contentDiv = document.getElementById('panel-content');
+         const titleDiv = document.getElementById('panel-title');
+
+         titleDiv.textContent = type === 'building' ? 'แก้ไขสิ่งปลูกสร้าง' : 'แก้ไขป้าย';
+
+         // Simple form generation based on common fields
+         // You should adapt this to match your exact Google Sheets column structure
+         let formHTML = `
+             <input type="hidden" id="edit-id" value="${dataObj.id || dataObj._row_num}">
+             <input type="hidden" id="edit-type" value="${type}">
+
+             <div class="form-group">
+                 <label class="form-label">ชื่อเจ้าของ / ชื่อป้าย</label>
+                 <input type="text" class="form-input" id="edit-owner-name" value="${dataObj.owner_name || dataObj.sign_name || ''}">
+             </div>
+             <div class="form-group">
+                 <label class="form-label">พิกัด (Lat, Lng)</label>
+                 <input type="text" class="form-input" id="edit-lat-lng" value="${dataObj.lat_long || ''}" readonly>
+             </div>
+             <div class="form-group">
+                 <label class="form-label">รายละเอียด</label>
+                 <textarea class="form-textarea" id="edit-description">${dataObj.description || dataObj.details || ''}</textarea>
+             </div>
+             <div class="form-group">
+                 <label class="form-label">รูปภาพ (URL หรือ Base64)</label>
+                 <input type="text" class="form-input" id="edit-image-url" value="${dataObj.image_url || ''}">
+                  <img id="preview-image-edit" class="preview-image mt-2" style="display: ${dataObj.image_url ? 'block' : 'none'};" src="${dataObj.image_url || ''}" alt="Preview">
+             </div>
+             <button class="save-btn" onclick="saveEdits()">บันทึก</button>
+             <button class="delete-btn" onclick="deleteEntry('${type}', ${dataObj.id || dataObj._row_num})">ลบข้อมูล</button>
+         `;
+
+         contentDiv.innerHTML = formHTML;
+         lucide.createIcons(); // Initialize icons in the panel
+
+         // Setup image preview for edit field
+         document.getElementById('edit-image-url').addEventListener('input', function() {
+             const imgPreview = document.getElementById('preview-image-edit');
+             if (this.value) {
+                 imgPreview.src = this.value;
+                 imgPreview.style.display = 'block';
+             } else {
+                 imgPreview.style.display = 'none';
+             }
+         });
+
+         panel.classList.add('active');
+
+         // Store reference to the marker/data being edited
+         // This is a simplified approach, ideally link directly to the marker if possible
+         editingMarker = { data: dataObj, array: dataArray, index: dataArray.indexOf(dataObj) };
+    }
+
+    async function saveEdits() {
+        if (!editingMarker) {
+            showNotification('ไม่มีข้อมูลที่กำลังแก้ไข', 'error');
+            return;
+        }
+
+        const id = document.getElementById('edit-id').value;
+        const type = document.getElementById('edit-type').value;
+        const ownerName = document.getElementById('edit-owner-name').value;
+        const latLng = document.getElementById('edit-lat-lng').value;
+        const description = document.getElementById('edit-description').value;
+        const imageUrl = document.getElementById('edit-image-url').value;
+
+        // Show saving indicator
+        const panel = document.getElementById('side-panel');
+        const saveBtn = panel.querySelector('.save-btn');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = 'กำลังบันทึก...';
+        saveBtn.disabled = true;
+
+        try {
+            const formData = new FormData();
+            formData.append('action', 'updateData');
+            formData.append('id', id);
+            formData.append('type', type);
+            formData.append('owner_name', ownerName); // Adjust field names as per your GS setup
+            formData.append('lat_long', latLng);
+            formData.append('description', description); // Adjust field names as per your GS setup
+            formData.append('image_url', imageUrl); // Adjust field names as per your GS setup
+
+            const res = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: formData });
+            const result = await res.json();
+
+            if (result.result === 'success') {
+                // Update local data stores and markers
+                let dataArray = type === 'building' ? allBuildings : allSigns;
+                let dataIndex = dataArray.findIndex(item => (item.id == id || item._row_num == id)); // Use == for potential string/number mismatch
+                if (dataIndex !== -1) {
+                    // Update the local object
+                    dataArray[dataIndex].owner_name = ownerName;
+                    dataArray[dataIndex].lat_long = latLng;
+                    dataArray[dataIndex].description = description;
+                    dataArray[dataIndex].image_url = imageUrl;
+
+                    // Find and update the corresponding marker's popup and stored data
+                    surveyLayers.eachLayer(marker => {
+                        if (marker._popupData && (marker._popupData.id == id || marker._popupData._row_num == id)) {
+                             // Update stored data reference
+                             marker._popupData.owner_name = ownerName;
+                             marker._popupData.lat_long = latLng;
+                             marker._popupData.description = description;
+                             marker._popupData.image_url = imageUrl;
+                             // Refresh popup content
+                             setupMarkerPopup(marker, marker._popupData, type);
+                        }
+                    });
+
+                    showNotification('บันทึกข้อมูลสำเร็จ!', 'success');
+                    closePanel();
+                    // Reload tables to reflect changes
+                    renderBuildingTable();
+                    renderSignTable();
+                } else {
+                     showNotification('ไม่พบข้อมูลใน store ภายใน', 'error');
+                }
+
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (err) {
+            console.error('Error saving edits:', err);
+            showNotification(`บันทึกข้อมูลล้มเหลว: ${err.message}`, 'error');
+        } finally {
+            // Restore button state
+            saveBtn.textContent = originalText;
+            saveBtn.disabled = false;
+        }
+    }
+
+    function closePanel() {
+        document.getElementById('side-panel').classList.remove('active');
+        editingMarker = null; // Clear reference
+    }
+
+    async function deleteEntry(type, rowId) {
+        if (!confirm(`ต้องการลบข้อมูล ${type} นี้จริงหรือไม่?`)) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('action', 'deleteData');
+            formData.append('id', rowId);
+            formData.append('type', type);
+
+            const res = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: formData });
+            const result = await res.json();
+
+            if (result.result === 'success') {
+                // Remove from local data
+                if (type === 'building') {
+                    allBuildings = allBuildings.filter(b => !(b.id == rowId || b._row_num == rowId)); // Use == for potential mismatch
+                } else {
+                    allSigns = allSigns.filter(s => !(s.id == rowId || s._row_num == rowId));
+                }
+
+                // Remove marker from map
+                surveyLayers.eachLayer(marker => {
+                    if (marker._popupData && (marker._popupData.id == rowId || marker._popupData._row_num == rowId)) {
+                         surveyLayers.removeLayer(marker);
+                    }
+                });
+
+                showNotification('ลบข้อมูลสำเร็จ!', 'success');
+                closePanel(); // Close panel after deletion
+                // Reload tables
+                renderBuildingTable();
+                renderSignTable();
+            } else {
+                throw new Error(result.error || 'Unknown error');
+            }
+        } catch (err) {
+            console.error('Error deleting entry:', err);
+            showNotification(`ลบข้อมูลล้มเหลว: ${err.message}`, 'error');
+        }
+    }
+
+    // --- Export Functions ---
+    async function exportGeoJSONForBuildings() {
+       try {
+            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=exportGeoJSON&type=building`);
+            const geojsonData = await res.json();
+            if (geojsonData.type === 'FeatureCollection') {
+                const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `buildings_${new Date().toISOString().slice(0,10)}.geojson`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showNotification('ส่งออก GeoJSON สิ่งปลูกสร้าง สำเร็จ!', 'success');
+            } else {
+                throw new Error('Invalid GeoJSON received');
+            }
+        } catch (err) {
+            console.error('Error exporting buildings:', err);
+            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูลสิ่งปลูกสร้าง', 'error');
+        }
+    }
+
+    async function exportGeoJSONForSigns() {
+       try {
+            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=exportGeoJSON&type=sign`);
+            const geojsonData = await res.json();
+            if (geojsonData.type === 'FeatureCollection') {
+                const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `signs_${new Date().toISOString().slice(0,10)}.geojson`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showNotification('ส่งออก GeoJSON ป้าย สำเร็จ!', 'success');
+            } else {
+                throw new Error('Invalid GeoJSON received');
+            }
+        } catch (err) {
+            console.error('Error exporting signs:', err);
+            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูลป้าย', 'error');
+        }
+    }
+
+    // Placeholder for image loading function
+    async function loadBuildingImages() {
+        // Implement logic to fetch image URLs from Google Drive folder using Apps Script
+        // and potentially update local data or markers.
+        // This requires setting up Apps Script to list and provide download links for images.
+        showNotification('ฟังก์ชันนี้อยู่ระหว่างการพัฒนา', 'error');
+    }
+
+
+    // --- Event Listeners ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Initialize map first
+        initMap();
+
+        // Register Service Worker for caching (only works on localhost or HTTPS)
+        if ('serviceWorker' in navigator) {
+            try {
+                // Register the *new* sw.js file that handles tile caching
+                await navigator.serviceWorker.register('/sw.js'); // Adjust path if necessary
+                console.log('Service Worker registered for tile caching.');
+            } catch (registrationError) {
+                console.warn('SW registration failed:', registrationError);
+                // Optionally inform the user that offline features won't work
+                // showNotification('การลงทะเบียน Service Worker ล้มเหลว ระบบแคชออฟไลน์จะไม่ทำงาน', 'error');
+            }
+        } else {
+             console.log('Service Worker not supported in this browser.');
+             // Optionally inform the user
+             // showNotification('เบราว์เซอร์นี้ไม่รองรับ Service Worker ระบบแคชออฟไลน์จะไม่ทำงาน', 'error');
+        }
+
+        // Initialize Lucide icons after DOM loads
+        lucide.createIcons();
+
+        // Attach event listeners
+        document.getElementById('btn-building').addEventListener('click', () => activateTool('building'));
+        document.getElementById('btn-sign').addEventListener('click', () => activateTool('sign'));
+        document.getElementById('btn-refresh').addEventListener('click', loadExistingData);
+        document.getElementById('btn-edit').addEventListener('click', toggleEditMode);
+        document.getElementById('add-trigger').addEventListener('click', showConfirmOverlay);
+        document.getElementById('btn-confirm-yes').addEventListener('click', confirmCapture);
+        document.getElementById('btn-confirm-no').addEventListener('click', () => {
+             document.getElementById('confirm-overlay').classList.remove('active');
+             document.getElementById('confirm-overlay').classList.add('hidden');
+        });
+        document.querySelectorAll('.table-btn[data-type]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const type = e.currentTarget.getAttribute('data-type');
+                currentTypeFilter = type;
+                document.querySelectorAll('.table-btn').removeClass('active');
+                e.currentTarget.classList.add('active');
+                if (type === 'building') {
+                    renderBuildingTable();
+                } else {
+                    renderSignTable();
+                }
+            });
+        });
+        document.getElementById('btn-export-geojson').addEventListener('click', exportGeoJSONForBuildings);
+        document.getElementById('btn-export-sign-geojson').addEventListener('click', exportGeoJSONForSigns);
+        document.getElementById('btn-load-images').addEventListener('click', loadBuildingImages);
+        document.querySelector('.close-btn').addEventListener('click', closePanel);
+        document.getElementById('btn-save-edits').addEventListener('click', saveEdits);
+        document.getElementById('btn-cancel-edit').addEventListener('click', () => { hideEditModeModal(); loadExistingData(); }); // Refresh data on cancel
+
+        // Helper for removing multiple classes
+        NodeList.prototype.removeClass = HTMLCollection.prototype.removeClass = Array.prototype.removeClass = function(className) {
+            this.forEach(el => el.classList.remove(className));
+            return this;
+        };
+
+        // Load initial data
+        await loadExistingData();
+    });
+
+
+    // Make functions available globally for inline onclick handlers
+    window.zoomToLocation = zoomToLocation;
+    window.openEditPanel = openEditPanel;
+    window.closePanel = closePanel;
+    window.saveEdits = saveEdits;
+    window.deleteEntry = deleteEntry;
+    window.exportGeoJSONForBuildings = exportGeoJSONForBuildings;
+    window.exportGeoJSONForSigns = exportGeoJSONForSigns;
+    window.loadBuildingImages = loadBuildingImages;
+    window.toggleEditMode = toggleEditMode;
+    window.deactivateTools = deactivateTools;
+
+  </script>
+</body>
 </html>

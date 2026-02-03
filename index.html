@@ -43,18 +43,29 @@
             border-radius: 50%;
             position: relative;
         }
-        .crosshair-line { position: absolute; background-color: rgba(239, 68, 68, 0.9); }
+        .crosshair-line { position: absolute; background-color: rgba(239, 68, 68, 0.8); }
         .line-v { width: 3px; height: 18px; left: 50%; transform: translateX(-50%); }
         .line-h { height: 3px; width: 18px; top: 50%; transform: translateY(-50%); }
         .v-top { top: -20px; } .v-bottom { bottom: -20px; }
         .h-left { left: -20px; } .h-right { right: -20px; }
 
+        /* เพิ่มการเร่งฮาร์ดแวร์สำหรับแผนที่ */
+        #map {
+          transform: translate3d(0, 0, 0);
+          will-change: transform;
+        }
+
+        /* ปิดการเรนเดอร์ชั่วคราวเมื่อเลื่อนแผนที่ (เพิ่มความลื่น) */
+        .leaflet-zoom-anim .circle-marker,
+        .leaflet-zoom-anim .crosshair {
+          display: none !important;
+        }
+
         /* แก้ไขส่วน .side-panel ให้โปร่งใส */
         .side-panel { 
             transition: transform 0.3s ease-in-out; 
             transform: translateX(100%); 
-            background: rgba(255, 255, 255, 0.6); /* โปร่งใส 95% */
-            backdrop-filter: blur(10px); /* เอฟเฟกต์เบลอ */
+            background: rgba(255, 255, 255, 0.6); /* โปร่งใส 95% */            
             z-index: 1010;
             box-shadow: -5px 0 25px rgba(0,0,0,0.15); /* เงาให้ดูดีขึ้น */
         }
@@ -153,7 +164,6 @@
 
         /* สไตล์สำหรับแกลเลอรี่รูปภาพ */
         #image-gallery-modal {
-          backdrop-filter: blur(10px);
         }
 
         #gallery-grid::-webkit-scrollbar {
@@ -219,7 +229,6 @@
             height: 14px;
             border-radius: 50%;
             border: 2px solid white;
-            box-shadow: 0 0 4px rgba(0,0,0,0.3);
             cursor: pointer;
         }
         .circle-building { background-color: #f59e0b; }
@@ -1850,6 +1859,86 @@
             } catch(e) {
                 console.error("Error loading data:", e);
             }
+        }
+
+        // ตรวจจับอุปกรณ์มือถือ
+        function isMobile() {
+          return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // ปรับการตั้งค่าแผนที่สำหรับมือถือ
+        function optimizeMapForMobile() {
+          if (isMobile() && map) {
+            // ลดความละเอียดขณะเลื่อน (เพิ่มความลื่น)
+            map.on('movestart', () => {
+              map.off('tileload', map._onTileLoad);
+            });
+            
+            map.on('moveend', () => {
+              map.on('tileload', map._onTileLoad);
+              map._onTileLoad();
+            });
+            
+            // ปิดการเรนเดอร์มาร์กเกอร์ชั่วคราวขณะเลื่อน
+            map.on('movestart', () => {
+              surveyLayers.eachLayer(layer => {
+                if (layer.getElement) {
+                  const el = layer.getElement();
+                  if (el) el.style.display = 'none';
+                }
+              });
+            });
+            
+            map.on('moveend', () => {
+              surveyLayers.eachLayer(layer => {
+                if (layer.getElement) {
+                  const el = layer.getElement();
+                  if (el) el.style.display = 'block';
+                }
+              });
+            });
+          }
+        }
+
+        // ในฟังก์ชัน loadExistingData()
+        if (allBuildings.length > 200 || allSigns.length > 200) {
+          // แสดงเฉพาะมาร์กเกอร์ในมุมมองปัจจุบัน
+          map.on('moveend', updateVisibleMarkers);
+          updateVisibleMarkers(); // เรียกครั้งแรก
+        }
+
+        function updateVisibleMarkers() {
+          const bounds = map.getBounds();
+          surveyLayers.clearLayers();
+          
+          // แสดงเฉพาะมาร์กเกอร์ในมุมมอง
+          allBuildings.filter(b => bounds.contains(L.latLng(b.lat_long.split(',').map(Number)))).forEach(...);
+          allSigns.filter(s => bounds.contains(L.latLng(s.lat_long.split(',').map(Number)))).forEach(...);
+        }
+
+        // เรียกใช้หลังสร้างแผนที่
+        function initMap() {
+          map = L.map('map', { 
+            zoomControl: false, 
+            attributionControl: false,
+            tap: isMobile() // แก้ปัญหาการแตะบนมือถือ
+          }).setView([15.234, 102.054], 16);
+          
+          L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 22,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            updateWhenIdle: isMobile(), // ลดการโหลดไทล์ขณะเลื่อน
+            updateWhenZooming: false
+          }).addTo(map);
+          
+          surveyLayers.addTo(map);
+          
+          // ปรับแต่งสำหรับมือถือ
+          if (isMobile()) {
+            optimizeMapForMobile();
+            // ลดจำนวนไทล์ที่โหลด
+            map._limitZoom = () => 19; // จำกัดซูมสูงสุด
+          }
         }
 
         // แก้ไขฟังก์ชัน refreshData

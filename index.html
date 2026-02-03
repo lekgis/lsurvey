@@ -955,19 +955,17 @@
           
           // ✅ ลบโค้ด setTimeout + panTo ทั้งหมดออก!
           // เหลือเฉพาะการผูกปุ่ม
-          marker.on('popupopen', () => {
+        marker.on('popupopen', () => {
             const buttons = marker.getPopup().getElement().querySelectorAll('button');
-            
             buttons[0].onclick = (e) => {
-              e.stopPropagation();
-              showEditForm(marker._popupData, marker._popupData.type);
+                e.stopPropagation();
+                openEditPanel(marker._popupData, marker._popupData.type, marker); // ✅ แก้ไขตรงนี้
             };
-            
             buttons[1].onclick = (e) => {
-              e.stopPropagation();
-              showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
+                e.stopPropagation();
+                showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
             };
-          });
+        });
         }
 
         // ฟังก์ชันลบจุดและข้อมูลจาก Google Sheets (ข้อ 1)

@@ -99,6 +99,17 @@
         transform: translateX(-50%);
         z-index: 1005;
         }
+        /* เพิ่มการเร่งฮาร์ดแวร์สำหรับแผนที่ */
+        #map {
+          transform: translate3d(0, 0, 0);
+          will-change: transform;
+        }
+
+        /* ปิดการเรนเดอร์ชั่วคราวเมื่อเลื่อนแผนที่ (เพิ่มความลื่น) */
+        .leaflet-zoom-anim .circle-marker,
+        .leaflet-zoom-anim .crosshair {
+          display: none !important;
+        }
         /* สไตล์สำหรับเมนูฟันเฟือง */
         #settings-menu button {
           opacity: 0;

@@ -1241,6 +1241,7 @@
             marker.closePopup();
         }
 
+        // ✅ แก้ไขฟังก์ชัน saveSurveyData ให้รองรับออฟไลน์อย่างสมบูรณ์
         async function saveSurveyData() {
             const form = document.getElementById('survey-form');
             const formData = new FormData(form);
@@ -1256,24 +1257,25 @@
                 }
             }
             
-            // ดึงพิกัดจากหน้าจอ
+            // ดึงพิกัด
             data.lat_long = document.getElementById('latlng-display').innerText;
             
-            // จัดการรูปภาพ → base64
+            // จัดการรูปภาพ
             let imageBase64 = "";
+            let imageFilename = null;
             const fileInput = form.querySelector('input[type="file"]');
+            
             if (fileInput && fileInput.files[0]) {
                 const file = fileInput.files[0];
                 const arrayBuffer = await file.arrayBuffer();
                 const bytes = [...new Uint8Array(arrayBuffer)];
                 const binary = bytes.map(b => String.fromCharCode(b)).join('');
                 imageBase64 = `${file.type};base64,${btoa(binary)}`;
+                imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
             }
             
-            // หาประเภท (building หรือ sign)
+            // หาประเภทและคีย์
             const type = editingMarker._popupData.type;
-            
-            // หาคีย์สำหรับอัปเดต
             const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
             
             if (!rowKey) {
@@ -1281,88 +1283,112 @@
                 return;
             }
             
-            // ✅ ปิดหน้าต่างทันทีก่อนอัปโหลด
+            // ปิดหน้าต่างทันที
             closePanel();
             
-            // ปิดการใช้งานปุ่มรีโหลด
-            disableRefreshButton();
-            document.getElementById('refresh-icon').classList.add('animate-spin');
-            
-            // แสดงแจ้งเตือนว่ากำลังบันทึก (ฝั่งซ้าย)
-            const savingMsg = document.createElement('div');
-            savingMsg.className = 'fixed top-4 left-4 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-            savingMsg.innerHTML = '<i data-lucide="loader" class="w-5 h-5 inline mr-2 animate-spin"></i>กำลังบันทึกข้อมูล...';
-            document.body.appendChild(savingMsg);
-            
-            // ส่งข้อมูลไปยัง Google Sheets
-            const body = new URLSearchParams();
-            body.append('action', 'update');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            body.append('payload', JSON.stringify(data));
-            body.append('image', imageBase64);
-            body.append('fileName', data.building_c || data.s_code || `IMG_${Date.now()}.jpg`);
+            // แสดงแจ้งเตือนว่ากำลังบันทึก
+            showNotification('กำลังบันทึกข้อมูล...', 'info');
             
             try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
-                    method: 'POST',
-                    body: body
-                });
+                // ✅ ตรวจสอบสถานะออนไลน์ก่อน
+                if (!isOnline || !navigator.onLine) {
+                    // ถ้าออฟไลน์และมีรูปภาพ → บันทึกลง IndexedDB
+                    if (imageBase64) {
+                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, type);
+                        console.log(`รูปภาพถูกบันทึกไว้ในมือถือ (ID: ${imageId})`);
+                    }
+                    
+                    // เก็บข้อมูลข้อความไว้ในคิว
+                    const textData = { ...data };
+                    if (imageBase64) {
+                        textData.hasImage = true;
+                        textData.imageFilename = imageFilename;
+                    }
+                    
+                    const result = await sendDataWithRetry('update', type, textData, rowKey);
+                    
+                    if (result.success) {
+                        // อัปเดตข้อมูลในป๊อปอัป
+                        editingMarker._popupData = { ...editingMarker._popupData, ...data };
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        await loadExistingData();
+                        
+                        showNotification('บันทึกข้อมูลเรียบร้อยแล้ว! (รูปภาพจะถูกอัปโหลดเมื่อออนไลน์)', 'success');
+                    } else if (result.queued) {
+                        // อัปเดตข้อมูลในป๊อปอัปด้วยสถานะคิว
+                        editingMarker._popupData = { 
+                            ...editingMarker._popupData, 
+                            ...data,
+                            queued: true,
+                            queueId: result.queueId
+                        };
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        
+                        showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
+                    }
+                    
+                    return;
+                }
                 
-                if (res.ok) {
-                    // ซ่อนข้อความ "กำลังบันทึก"
-                    savingMsg.classList.add('animate-fade-out');
-                    setTimeout(() => savingMsg.remove(), 300);
-                    
-                    // แสดงแจ้งเตือนสำเร็จ (ฝั่งซ้าย)
-                    const successMsg = document.createElement('div');
-                    successMsg.className = 'fixed top-4 left-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                    successMsg.innerHTML = '<i data-lucide="check-circle" class="w-5 h-5 inline mr-2"></i>บันทึกข้อมูลเรียบร้อยแล้ว!';
-                    document.body.appendChild(successMsg);
-                    
-                    // ปิดแจ้งเตือนอัตโนมัติหลัง 2 วินาที
-                    setTimeout(() => {
-                        successMsg.classList.add('animate-fade-out');
-                        setTimeout(() => successMsg.remove(), 300);
-                    }, 2000);
-                    
+                // ✅ ถ้าออนไลน์ → ส่งข้อมูลและรูปภาพพร้อมกัน
+                if (imageBase64) {
+                    data.image = imageBase64;
+                    data.fileName = imageFilename;
+                }
+                
+                const result = await sendDataWithRetry('update', type, data, rowKey);
+                
+                if (result.success) {
                     // อัปเดตข้อมูลในป๊อปอัป
                     editingMarker._popupData = { ...editingMarker._popupData, ...data };
                     setupMarkerPopup(editingMarker, editingMarker._popupData, type);
                     
-                    // ปุ่มรีโหลดกระพริบเขียว
-                    document.getElementById('refresh-icon').classList.remove('animate-spin');
-                    document.getElementById('btn-refresh').classList.add('refresh-success');
-                    setTimeout(() => {
-                        document.getElementById('btn-refresh').classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
                     // โหลดข้อมูลใหม่
                     await loadExistingData();
                     
-                } else {
-                    throw new Error("บันทึกข้อมูลไม่สำเร็จ");
+                    showNotification('บันทึกข้อมูลเรียบร้อยแล้ว!', 'success');
+                    
+                } else if (result.queued) {
+                    // ข้อมูลถูกเก็บไว้ในคิว
+                    editingMarker._popupData = { 
+                        ...editingMarker._popupData, 
+                        ...data,
+                        queued: true,
+                        queueId: result.queueId
+                    };
+                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    
+                    showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
-            } catch (err) {
-                // ซ่อนข้อความ "กำลังบันทึก"
-                savingMsg.classList.add('animate-fade-out');
-                setTimeout(() => savingMsg.remove(), 300);
                 
-                document.getElementById('refresh-icon').classList.remove('animate-spin');
-                enableRefreshButton();
+            } catch (err) {
                 console.error("Error saving data:", err);
                 
-                // แสดงแจ้งเตือนข้อผิดพลาด (ฝั่งซ้าย)
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'fixed top-4 left-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in';
-                errorMsg.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 inline mr-2"></i>เกิดข้อผิดพลาดในการบันทึก!';
-                document.body.appendChild(errorMsg);
-                
-                setTimeout(() => {
-                    errorMsg.classList.add('animate-fade-out');
-                    setTimeout(() => errorMsg.remove(), 300);
-                }, 3000);
+                // ✅ ถ้าเกิดข้อผิดพลาด ให้เก็บข้อมูลไว้ในคิวแทนการแจ้งเตือนข้อผิดพลาด
+                try {
+                    const textData = { ...data };
+                    if (imageBase64) {
+                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, type);
+                        textData.hasImage = true;
+                        textData.imageFilename = imageFilename;
+                    }
+                    
+                    const queueId = addToSyncQueue('update', type, textData, rowKey);
+                    
+                    editingMarker._popupData = { 
+                        ...editingMarker._popupData, 
+                        ...data,
+                        queued: true,
+                        queueId: queueId
+                    };
+                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    
+                    showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
+                    
+                } catch (queueErr) {
+                    console.error("Failed to save to queue:", queueErr);
+                    showNotification('เกิดข้อผิดพลาดในการบันทึก!', 'error');
+                }
             }
         }
 
@@ -2010,56 +2036,78 @@
         }
 
         async function loadExistingData() {
-          try {
-            const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
-            const data = await res.json();
-            surveyLayers.clearLayers();
-            
-            // เก็บข้อมูลไว้สำหรับตาราง
-            allBuildings = data.buildings || [];
-            allSigns = data.signs || [];
-            
-            // แสดงข้อมูลในตาราง
-            renderBuildingTable();
-            renderSignTable();
-            
-            // ✅ สร้าง marker บนแผนที่ด้วยระบบกรองตามจำนวนข้อมูล
-            const totalMarkers = allBuildings.length + allSigns.length;
-            const useOptimizedRendering = totalMarkers > 200;
-
-            if (useOptimizedRendering) {
-              // โหมดข้อมูลจำนวนมาก: แสดงเฉพาะมาร์กเกอร์ในมุมมอง
-              map.off('moveend', updateVisibleMarkers);
-              map.off('zoomend', updateVisibleMarkers);
-              map.on('moveend', updateVisibleMarkers);
-              map.on('zoomend', updateVisibleMarkers);
-              updateVisibleMarkers(); // แสดงมาร์กเกอร์ในมุมมองทันที
-              
-            } else {
-              // โหมดข้อมูลน้อย: แสดงมาร์กเกอร์ทั้งหมด
-              allBuildings.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
-                setupMarkerPopup(m, r, 'building');
-                m.addTo(surveyLayers);
-                if (isEditMode) enableMarkerDragging(m, r);
-              });
-              
-              allSigns.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
-                setupMarkerPopup(m, r, 'sign');
-                m.addTo(surveyLayers);
-                if (isEditMode) enableMarkerDragging(m, r);
-              });
+            try {
+                const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
+                const data = await res.json();
+                
+                // ✅ เก็บมาร์กเกอร์ที่กำลังรอซิงค์ไว้ก่อน
+                const pendingMarkers = [];
+                surveyLayers.eachLayer(layer => {
+                    if (layer._popupData && layer._popupData.queued) {
+                        pendingMarkers.push({
+                            latlng: layer.getLatLng(),
+                            data: layer._popupData,
+                            type: layer._popupData.type
+                        });
+                    }
+                });
+                
+                // ล้างมาร์กเกอร์ทั้งหมด
+                surveyLayers.clearLayers();
+                
+                // เก็บข้อมูลไว้สำหรับตาราง
+                allBuildings = data.buildings || [];
+                allSigns = data.signs || [];
+                
+                // แสดงข้อมูลในตาราง
+                renderBuildingTable();
+                renderSignTable();
+                
+                // ✅ สร้างมาร์กเกอร์จากข้อมูลเซิร์ฟเวอร์
+                const totalMarkers = allBuildings.length + allSigns.length;
+                const useOptimizedRendering = totalMarkers > 200;
+                
+                if (useOptimizedRendering) {
+                    map.off('moveend', updateVisibleMarkers);
+                    map.off('zoomend', updateVisibleMarkers);
+                    map.on('moveend', updateVisibleMarkers);
+                    map.on('zoomend', updateVisibleMarkers);
+                    updateVisibleMarkers();
+                } else {
+                    // สร้างมาร์กเกอร์จากข้อมูลเซิร์ฟเวอร์
+                    allBuildings.forEach(r => {
+                        if (!r.lat_long) return;
+                        const coords = r.lat_long.split(',').map(Number);
+                        if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+                        setupMarkerPopup(m, r, 'building');
+                        m.addTo(surveyLayers);
+                        if (isEditMode) enableMarkerDragging(m, r);
+                    });
+                    
+                    allSigns.forEach(r => {
+                        if (!r.lat_long) return;
+                        const coords = r.lat_long.split(',').map(Number);
+                        if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+                        setupMarkerPopup(m, r, 'sign');
+                        m.addTo(surveyLayers);
+                        if (isEditMode) enableMarkerDragging(m, r);
+                    });
+                }
+                
+                // ✅ เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์กลับเข้ามา
+                pendingMarkers.forEach(marker => {
+                    const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
+                    m._popupData = marker.data;
+                    setupMarkerPopup(m, marker.data, marker.type);
+                    m.addTo(surveyLayers);
+                    if (isEditMode) enableMarkerDragging(m, marker.data);
+                });
+                
+            } catch(e) {
+                console.error("Error loading data:", e);
             }
-          } catch(e) {
-            console.error("Error loading data:", e);
-          }
         }
         // ============================================
         // Offline Data Storage System

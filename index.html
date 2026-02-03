@@ -595,14 +595,17 @@
             attributionControl: false,
             preferCanvas: true
             // ลบบรรทัด: tap: isMobile()
-          }).setView([15.234, 102.054], 16);
+          }).setView([15.202, 102.068], 14);
           
+        // ปรับการตั้งค่าไทล์ให้โหลดรอบๆ มากขึ้น
         L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
           maxZoom: 22,
           subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-          updateWhenIdle: isMobile(), // โหลดไทล์เฉพาะเมื่อหยุดเลื่อน (มือถือ)
-          updateWhenZooming: true, // ✅ เปิดการอัปเดตไทล์ขณะซูม
-          keepBuffer: 2
+          updateWhenIdle: false, // ✅ โหลดขณะเลื่อน (ไม่รอหยุด)
+          updateWhenZooming: true,
+          keepBuffer: 4, // ✅ เก็บไทล์รอบๆ เพิ่มอีก 4 ชั้น (จากเดิม 2)
+          maxNativeZoom: 19, // ป้องกันการโหลดไทล์ที่ไม่มี
+          reuseTiles: true // ใช้ไทล์เก่าซ้ำแทนโหลดใหม่
         }).addTo(map);
           
           surveyLayers.addTo(map);

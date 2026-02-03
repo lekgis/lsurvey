@@ -871,14 +871,14 @@
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
             
-            // ปิดการใช้งานปุ่ม
             disableRefreshButton();
             refreshIcon.classList.add('animate-spin');
             
             // สร้างข้อมูลพื้นฐาน
             const data = {
                 lat_long: `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`,
-                date_added: new Date().toISOString()
+                date_added: new Date().toISOString(),
+                tempMarker: true // ✅ ทำเครื่องหมายว่าเป็นมาร์กเกอร์ชั่วคราว
             };
             
             // เพิ่มข้อมูลเริ่มต้น
@@ -895,8 +895,11 @@
                 data.b_area = '0';
             }
             
+            // ✅ ทำเครื่องหมายในมาร์กเกอร์ว่าเป็นชั่วคราว
+            marker._popupData = { ...data, type: type, tempMarker: true };
+            setupMarkerPopup(marker, marker._popupData, type);
+            
             try {
-                // ส่งข้อมูลพร้อมการลองใหม่
                 const result = await sendDataWithRetry('quickAdd', type, data);
                 
                 if (result.success) {
@@ -908,22 +911,39 @@
                         enableRefreshButton();
                     }, 2000);
                     
-                    // อัปเดตข้อมูลในมาร์กเกอร์
+                    // ✅ ลำดับที่ถูกต้อง:
+                    // 1. อัปเดตข้อมูลในมาร์กเกอร์
                     if (result.data && result.data.data && result.data.data.id) {
                         data.id = result.data.data.id;
+                        data.tempMarker = false; // ไม่ใช่มาร์กเกอร์ชั่วคราวแล้ว
+                        
+                        // 2. อัปเดตข้อมูลในมาร์กเกอร์ที่มีอยู่ (แต่ยังไม่ลบ)
+                        marker._popupData = { ...data, type: type, tempMarker: false };
+                        setupMarkerPopup(marker, marker._popupData, type);
+                        
+                        // 3. โหลดข้อมูลใหม่ (จะสร้างมาร์กเกอร์จริงจากเซิร์ฟเวอร์)
+                        await loadExistingData();
+                        
+                        // 4. ลบมาร์กเกอร์ชั่วคราวหลังจากข้อมูลจริงแสดงแล้ว
+                        // (ทำในฟังก์ชัน loadExistingData ด้านล่าง)
                     }
-                    
-                    setupMarkerPopup(marker, { ...data, id: data.id || Date.now() }, type);
-                    await loadExistingData();
                     
                     showNotification('เพิ่มจุดสำเร็จ!', 'success');
                     
                 } else if (result.queued) {
-                    // ข้อมูลถูกเก็บไว้ในคิวแล้ว
+                    // ถ้าอยู่ในคิว
                     refreshIcon.classList.remove('animate-spin');
                     enableRefreshButton();
                     
-                    setupMarkerPopup(marker, { ...data, id: result.queueId, queued: true }, type);
+                    marker._popupData = { 
+                        ...data, 
+                        type: type, 
+                        tempMarker: true,
+                        queued: true,
+                        queueId: result.queueId
+                    };
+                    setupMarkerPopup(marker, marker._popupData, type);
+                    
                     await loadExistingData();
                     
                     showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
@@ -932,7 +952,15 @@
             } catch (err) {
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
-                marker.remove();
+                
+                // ไม่ลบมาร์กเกอร์ แต่ทำเครื่องหมายว่าล้มเหลว
+                marker._popupData = { 
+                    ...data, 
+                    type: type, 
+                    tempMarker: true,
+                    failed: true
+                };
+                setupMarkerPopup(marker, marker._popupData, type);
                 
                 showNotification("การบันทึกล้มเหลว: " + err.message, 'error');
             }
@@ -1015,40 +1043,49 @@
 
         // ข้อ 3: ตั้งค่าป๊อปอัปเพื่อเปิดฟอร์ม (แก้ไขเพิ่มปุ่มลบ + แก้ไขป๊อบอัปไม่ปิดอัตโนมัติ)
         function setupMarkerPopup(marker, data, type) {
-          const popupDiv = document.createElement('div');
-          popupDiv.className = "p-1 min-w-[160px]";
-          popupDiv.innerHTML = `
+            // ✅ เพิ่มข้อความสถานะสำหรับมาร์กเกอร์ชั่วคราว
+            let statusBadge = '';
+            
+            if (data.tempMarker && data.queued) {
+                statusBadge = '<span class="text-xs bg-yellow-500 text-white px-2 py-1 rounded">⏳ รอซิงค์</span>';
+            } else if (data.tempMarker && data.failed) {
+                statusBadge = '<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">❌ ล้มเหลว</span>';
+            } else if (data.tempMarker) {
+                statusBadge = '<span class="text-xs bg-blue-500 text-white px-2 py-1 rounded">🔄 กำลังบันทึก</span>';
+            }
+            
+            const popupDiv = document.createElement('div');
+            popupDiv.className = "p-1 min-w-[160px]";
+            popupDiv.innerHTML = `
             <p class="font-bold text-sm text-blue-900">${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'}</p>
             <p class="text-[10px] text-gray-500">${data.lat_long}</p>
+            ${statusBadge}
             <div class="mt-2 space-y-1">
-              <button class="w-full bg-blue-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-blue-700">แก้ข้อมูล</button>
-              <button class="w-full bg-red-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-red-700">ลบจุด</button>
+                <button class="w-full bg-blue-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-blue-700">แก้ข้อมูล</button>
+                <button class="w-full bg-red-600 text-white text-[11px] py-2 rounded font-bold shadow-sm active:bg-red-700">ลบจุด</button>
             </div>
-          `;
-          
-          // ✅ แก้ไขหลัก: ปิด autoPan + ไม่แพนแผนที่อัตโนมัติ
-          marker.bindPopup(popupDiv, {
-            minWidth: 190,
-            maxWidth: 220,
-            autoPan: false, // ✅ ปิดการแพนอัตโนมัติ (สำคัญมาก!)
-            closeOnClick: true // ใช้ค่าเริ่มต้น (ปิดเมื่อคลิกนอกป๊อปอัป)
-          });
-          
-          marker._popupData = { ...data, type: type };
-          
-          // ✅ ลบโค้ด setTimeout + panTo ทั้งหมดออก!
-          // เหลือเฉพาะการผูกปุ่ม
-        marker.on('popupopen', () => {
-            const buttons = marker.getPopup().getElement().querySelectorAll('button');
-            buttons[0].onclick = (e) => {
-                e.stopPropagation();
-                openEditPanel(marker._popupData, marker._popupData.type, marker); // ✅ แก้ไขตรงนี้
-            };
-            buttons[1].onclick = (e) => {
-                e.stopPropagation();
-                showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
-            };
-        });
+            `;
+            
+            marker.bindPopup(popupDiv, {
+                minWidth: 190,
+                maxWidth: 220,
+                autoPan: false,
+                closeOnClick: true
+            });
+            
+            marker._popupData = { ...data, type: type };
+            
+            marker.on('popupopen', () => {
+                const buttons = marker.getPopup().getElement().querySelectorAll('button');
+                buttons[0].onclick = (e) => {
+                    e.stopPropagation();
+                    openEditPanel(marker._popupData, marker._popupData.type, marker);
+                };
+                buttons[1].onclick = (e) => {
+                    e.stopPropagation();
+                    showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
+                };
+            });
         }
 
         // ฟังก์ชันลบจุดและข้อมูลจาก Google Sheets (ข้อ 1)
@@ -2040,15 +2077,18 @@
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
                 const data = await res.json();
                 
-                // ✅ เก็บมาร์กเกอร์ที่กำลังรอซิงค์ไว้ก่อน
+                // ✅ เก็บมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวทั้งหมด
                 const pendingMarkers = [];
                 surveyLayers.eachLayer(layer => {
-                    if (layer._popupData && layer._popupData.queued) {
-                        pendingMarkers.push({
-                            latlng: layer.getLatLng(),
-                            data: layer._popupData,
-                            type: layer._popupData.type
-                        });
+                    if (layer._popupData) {
+                        // เก็บเฉพาะมาร์กเกอร์ที่รอซิงค์หรือมาร์กเกอร์ชั่วคราว
+                        if (layer._popupData.queued || layer._popupData.tempMarker) {
+                            pendingMarkers.push({
+                                latlng: layer.getLatLng(),
+                                 layer._popupData,
+                                type: layer._popupData.type
+                            });
+                        }
                     }
                 });
                 
@@ -2096,7 +2136,7 @@
                     });
                 }
                 
-                // ✅ เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์กลับเข้ามา
+                // ✅ เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวกลับเข้ามา
                 pendingMarkers.forEach(marker => {
                     const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
                     m._popupData = marker.data;
@@ -2104,6 +2144,23 @@
                     m.addTo(surveyLayers);
                     if (isEditMode) enableMarkerDragging(m, marker.data);
                 });
+                
+                // ✅ ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว
+                // (มาร์กเกอร์ชั่วคราวที่มีไอดีจริงจากเซิร์ฟเวอร์จะถูกลบออก)
+                setTimeout(() => {
+                    surveyLayers.eachLayer(layer => {
+                        if (layer._popupData && layer._popupData.tempMarker && !layer._popupData.queued) {
+                            // ตรวจสอบว่ามีมาร์กเกอร์จริงที่มีไอดีเดียวกันหรือไม่
+                            const hasRealMarker = allBuildings.some(b => b.id === layer._popupData.id) || 
+                                                 allSigns.some(s => s.id === layer._popupData.id);
+                            
+                            if (hasRealMarker) {
+                                surveyLayers.removeLayer(layer);
+                                console.log(`ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว: ${layer._popupData.id}`);
+                            }
+                        }
+                    });
+                }, 100); // รอเล็กน้อยเพื่อให้มาร์กเกอร์จริงแสดงก่อน
                 
             } catch(e) {
                 console.error("Error loading data:", e);
@@ -2288,6 +2345,26 @@
                     
                     if (result.success) {
                         item.status = 'success';
+                        
+                        // ✅ ลำดับที่ถูกต้องสำหรับการซิงค์:
+                        // 1. โหลดข้อมูลใหม่ก่อน (เพื่อให้มีข้อมูลจริงแสดง)
+                        if (item.action === 'quickAdd' || item.action === 'update') {
+                            await loadExistingData();
+                        }
+                        
+                        // 2. ลบมาร์กเกอร์ชั่วคราวหลังจากข้อมูลจริงแสดงแล้ว
+                        if (item.action === 'quickAdd') {
+                            surveyLayers.eachLayer(layer => {
+                                if (layer._popupData) {
+                                    if (layer._popupData.tempMarker && 
+                                        layer._popupData.queueId === item.id) {
+                                        surveyLayers.removeLayer(layer);
+                                        console.log(`ลบมาร์กเกอร์ชั่วคราวหลังซิงค์สำเร็จ: ${item.id}`);
+                                    }
+                                }
+                            });
+                        }
+                        
                         removeFromSyncQueue(item.id);
                         console.log(`Synced: ${item.id}`);
                     } else {
@@ -2300,7 +2377,6 @@
                 } catch (err) {
                     item.retryCount++;
                     console.error(`Error syncing ${item.id}:`, err);
-                    
                     if (item.retryCount >= 5) {
                         item.status = 'failed';
                         failedItems.push(item);

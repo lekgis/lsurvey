@@ -939,6 +939,7 @@
         }
 
         // แก้ไขฟังก์ชัน saveSurveyData
+        // แก้ไขฟังก์ชัน saveSurveyData
         async function saveSurveyData() {
             const form = document.getElementById('survey-form');
             const formData = new FormData(form);
@@ -957,17 +958,6 @@
             // ดึงพิกัด
             data.lat_long = document.getElementById('latlng-display').innerText;
             
-            // จัดการรูปภาพ
-            let imageBase64 = "";
-            const fileInput = form.querySelector('input[type="file"]');
-            if (fileInput && fileInput.files[0]) {
-                const file = fileInput.files[0];
-                const arrayBuffer = await file.arrayBuffer();
-                const bytes = [...new Uint8Array(arrayBuffer)];
-                const binary = bytes.map(b => String.fromCharCode(b)).join('');
-                imageBase64 = `${file.type};base64,${btoa(binary)}`;
-            }
-            
             // หาประเภทและคีย์
             const type = editingMarker._popupData.type;
             const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
@@ -977,6 +967,20 @@
                 return;
             }
             
+            // จัดการรูปภาพ
+            let imageBase64 = "";
+            let imageFilename = null;
+            const fileInput = form.querySelector('input[type="file"]');
+            
+            if (fileInput && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const bytes = [...new Uint8Array(arrayBuffer)];
+                const binary = bytes.map(b => String.fromCharCode(b)).join('');
+                imageBase64 = `${file.type};base64,${btoa(binary)}`;
+                imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
+            }
+            
             // ปิดหน้าต่างทันที
             closePanel();
             
@@ -984,30 +988,51 @@
             showNotification('กำลังบันทึกข้อมูล...', 'info');
             
             try {
-                // รวมรูปภาพในข้อมูล
-                if (imageBase64) {
-                    data.image = imageBase64;
-                    data.fileName = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
+                // ถ้ามีรูปภาพและออฟไลน์ → บันทึกลง IndexedDB ก่อน
+                if (imageBase64 && (!isOnline || !navigator.onLine)) {
+                    const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, type);
+                    console.log(`รูปภาพถูกบันทึกไว้ในมือถือ (ID: ${imageId})`);
+                    
+                    // เก็บข้อมูลข้อความไว้ในคิว แต่ไม่รวมรูปภาพ (เพราะจะส่งทีหลัง)
+                    const textData = { ...data };
+                    delete textData.image;
+                    delete textData.fileName;
+                    
+                    const result = await sendDataWithRetry('update', type, textData, rowKey);
+                    
+                    if (result.success) {
+                        editingMarker._popupData = { ...editingMarker._popupData, ...data };
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        await loadExistingData();
+                        showNotification('บันทึกข้อมูลเรียบร้อยแล้ว! (รูปภาพจะถูกอัปโหลดเมื่อออนไลน์)', 'success');
+                    } else if (result.queued) {
+                        editingMarker._popupData = { 
+                            ...editingMarker._popupData, 
+                            ...data,
+                            queued: true,
+                            queueId: result.queueId
+                        };
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
+                    }
+                    
+                    return;
                 }
                 
-                // ส่งข้อมูลพร้อมการลองใหม่
+                // ถ้าออนไลน์ → ส่งข้อมูลและรูปภาพพร้อมกัน
+                if (imageBase64) {
+                    data.image = imageBase64;
+                    data.fileName = imageFilename;
+                }
+                
                 const result = await sendDataWithRetry('update', type, data, rowKey);
                 
                 if (result.success) {
-                    // อัปเดตข้อมูลในป๊อปอัป
                     editingMarker._popupData = { ...editingMarker._popupData, ...data };
                     setupMarkerPopup(editingMarker, editingMarker._popupData, type);
-                    
-                    // โหลดข้อมูลใหม่
                     await loadExistingData();
-                    
                     showNotification('บันทึกข้อมูลเรียบร้อยแล้ว!', 'success');
-                    
                 } else if (result.queued) {
-                    // ข้อมูลถูกเก็บไว้ในคิว
-                    showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
-                    
-                    // อัปเดตข้อมูลในป๊อปอัปด้วยสถานะคิว
                     editingMarker._popupData = { 
                         ...editingMarker._popupData, 
                         ...data,
@@ -1015,6 +1040,7 @@
                         queueId: result.queueId
                     };
                     setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
                 
             } catch (err) {
@@ -2236,7 +2262,7 @@
         // ============================================
 
         async function sendDataWithRetry(action, type, data, rowKey = null, maxRetries = 5) {
-            // ถ้าออฟไลน์ ให้เก็บไว้ในคิว
+            // ถ้าออฟไลน์ → เก็บไว้ในคิวทันที
             if (!isOnline || !navigator.onLine) {
                 return addToSyncQueue(action, type, data, rowKey);
             }
@@ -2255,17 +2281,24 @@
                     }
                     
                     if (data) {
-                        if (typeof data === 'string') {
-                            body.append('payload', data);
-                        } else {
-                            body.append('payload', JSON.stringify(data));
+                        // แยกข้อมูลรูปภาพออก (จะส่งผ่านระบบแยก)
+                        const { image, fileName, ...textData } = data;
+                        
+                        if (Object.keys(textData).length > 0) {
+                            body.append('payload', JSON.stringify(textData));
+                        }
+                        
+                        // ถ้ามีรูปภาพ → บันทึกลง IndexedDB
+                        if (image && fileName) {
+                            const imageId = await saveImageToDB(image, fileName, rowKey, type);
+                            console.log(`รูปภาพถูกบันทึกไว้ชั่วคราว (ID: ${imageId})`);
                         }
                     }
                     
                     const res = await fetch(CONFIG.SCRIPT_URL.trim(), { 
                         method: 'POST', 
                         body,
-                        timeout: 30000 // 30 วินาที
+                        timeout: action === 'updateImage' ? 60000 : 30000
                     });
                     
                     if (res.ok) {
@@ -2278,14 +2311,12 @@
                     retryCount++;
                     
                     if (retryCount >= maxRetries) {
-                        // เก็บไว้ในคิวเพื่อส่งทีหลัง
                         const queueId = addToSyncQueue(action, type, data, rowKey);
                         console.error(`Failed after ${maxRetries} retries. Saved to queue: ${queueId}`);
                         return { success: false, queued: true, queueId: queueId };
                     }
                     
-                    // รอแล้วลองใหม่ (เพิ่มเวลาทีละน้อย)
-                    const waitTime = 1000 * Math.pow(2, retryCount); // 1s, 2s, 4s, 8s...
+                    const waitTime = 1000 * Math.pow(2, retryCount);
                     console.log(`Retry ${retryCount}/${maxRetries} after ${waitTime}ms...`);
                     await delay(waitTime);
                 }
@@ -2293,7 +2324,7 @@
         }
 
         // ============================================
-        // ประมวลผลคิวการซิงค์
+        // Enhanced Sync Process with Image Support
         // ============================================
 
         async function processSyncQueue() {
@@ -2312,7 +2343,7 @@
                         item.type,
                         item.data,
                         item.rowKey,
-                        3 // ลองใหม่ 3 ครั้ง
+                        3
                     );
                     
                     if (result.success) {
@@ -2336,9 +2367,11 @@
                     }
                 }
                 
-                // รอ 1 วินาทีระหว่างส่งแต่ละรายการ
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
+            
+            // ซิงค์รูปภาพที่ยังไม่ได้ส่ง
+            await syncPendingImages();
             
             saveSyncQueueToStorage();
             
@@ -2354,6 +2387,65 @@
             
             if (failedItems.length > 0) {
                 showNotification(`มี ${failedItems.length} รายการที่ซิงค์ไม่สำเร็จ`, 'error');
+            }
+        }
+
+        // ซิงค์รูปภาพที่ยังไม่ได้ส่ง
+        async function syncPendingImages() {
+            try {
+                const unsyncedImages = await getUnsyncedImages();
+                
+                if (unsyncedImages.length === 0) return;
+                
+                showNotification(`กำลังอัปโหลดรูปภาพ (${unsyncedImages.length} รูป)...`, 'info');
+                
+                for (const image of unsyncedImages) {
+                    try {
+                        // หาข้อมูลที่เกี่ยวข้อง
+                        const relatedData = syncQueue.find(q => q.rowKey === image.relatedId);
+                        
+                        if (!relatedData) {
+                            console.warn(`ไม่พบข้อมูลที่เกี่ยวข้องกับรูปภาพ ${image.id}`);
+                            continue;
+                        }
+                        
+                        // ส่งรูปภาพ
+                        const body = new URLSearchParams();
+                        body.append('action', 'updateImage');
+                        body.append('type', image.type);
+                        body.append('rowKey', image.relatedId);
+                        body.append('image', image.data);
+                        body.append('fileName', image.filename);
+                        
+                        const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
+                            method: 'POST',
+                            body,
+                            timeout: 60000 // 60 วินาที (รูปภาพใช้เวลานานกว่า)
+                        });
+                        
+                        if (res.ok) {
+                            await markImageAsSynced(image.id);
+                            console.log(`อัปโหลดรูปภาพสำเร็จ: ${image.filename}`);
+                        } else {
+                            image.retryCount++;
+                            if (image.retryCount >= 5) {
+                                console.error(`อัปโหลดรูปภาพล้มเหลวเกิน 5 ครั้ง: ${image.filename}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`Error syncing image ${image.id}:`, err);
+                        image.retryCount++;
+                    }
+                    
+                    // รอ 2 วินาทีระหว่างส่งแต่ละรูป
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                
+                // ลบรูปภาพที่ซิงค์สำเร็จแล้ว
+                await cleanupSyncedImages();
+                
+            } catch (err) {
+                console.error('Error syncing images:', err);
             }
         }
 
@@ -2397,6 +2489,59 @@
             }
         }
 
+        // ============================================
+        // Auto-check and sync on app startup
+        // ============================================
+
+        async function checkAndSyncOnStartup() {
+            console.log('ตรวจสอบข้อมูลที่รอซิงค์...');
+            
+            // โหลดคิวจาก localStorage
+            loadSyncQueueFromStorage();
+            
+            // ตรวจสอบรูปภาพที่ยังไม่ได้ซิงค์
+            try {
+                const unsyncedImages = await getUnsyncedImages();
+                const pendingCount = syncQueue.filter(i => i.status === 'pending').length;
+                
+                if (pendingCount > 0 || unsyncedImages.length > 0) {
+                    const totalPending = pendingCount + unsyncedImages.length;
+                    
+                    showNotification(
+                        `พบข้อมูลที่รอซิงค์ ${totalPending} รายการ`, 
+                        'warning'
+                    );
+                    
+                    // ถ้าออนไลน์ → เริ่มซิงค์ทันที
+                    if (isOnline) {
+                        setTimeout(() => {
+                            showNotification('กำลังซิงค์ข้อมูล...', 'info');
+                            processSyncQueue();
+                        }, 2000);
+                    } else {
+                        showNotification('⚠️ อยู่ในโหมดออฟไลน์ - รอการเชื่อมต่อ', 'warning');
+                    }
+                }
+            } catch (err) {
+                console.error('Error checking pending data:', err);
+            }
+        }
+
+        // เรียกใช้เมื่อแอปเริ่มทำงาน
+        window.onload = async () => {
+            initMap();
+            lucide.createIcons();
+            loadExistingData();
+            
+            // ตรวจสอบและซิงค์ข้อมูลที่ค้างอยู่
+            await checkAndSyncOnStartup();
+            
+            // ตรวจสอบสถานะการเชื่อมต่อทุก 30 วินาที
+            setInterval(() => {
+                updateSyncBadge();
+            }, 1000);
+        };
+
         // แสดงจำนวนข้อมูลที่รอซิงค์ในปุ่มฟันเฟือง
         function updateSyncBadge() {
             const pending = syncQueue.filter(i => i.status === 'pending').length;
@@ -2412,6 +2557,161 @@
 
         // เรียกใช้ทุกครั้งที่มีการเปลี่ยนแปลงคิว
         setInterval(updateSyncBadge, 1000);
+
+        // ============================================
+        // IndexedDB Storage for Images
+        // ============================================
+
+        let dbPromise = null;
+
+        // เปิด/สร้าง IndexedDB
+        function openDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('SurveyAppDB', 2);
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // สร้าง Store สำหรับรูปภาพ
+                    if (!db.objectStoreNames.contains('images')) {
+                        const imageStore = db.createObjectStore('images', { 
+                            keyPath: 'id' 
+                        });
+                        imageStore.createIndex('timestamp', 'timestamp');
+                        imageStore.createIndex('synced', 'synced');
+                    }
+                    
+                    // สร้าง Store สำหรับข้อมูลซิงค์
+                    if (!db.objectStoreNames.contains('syncQueue')) {
+                        const queueStore = db.createObjectStore('syncQueue', { 
+                            keyPath: 'id' 
+                        });
+                        queueStore.createIndex('status', 'status');
+                        queueStore.createIndex('timestamp', 'timestamp');
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
+                };
+                
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        // บันทึกรูปภาพลงใน IndexedDB
+        async function saveImageToDB(imageData, filename, relatedId, type) {
+            const db = await openDatabase();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('images', 'readwrite');
+                const store = transaction.objectStore('images');
+                
+                const imageRecord = {
+                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    filename: filename,
+                    data: imageData, // base64 string
+                    relatedId: relatedId,
+                    type: type, // 'building' หรือ 'sign'
+                    timestamp: new Date().toISOString(),
+                    synced: false,
+                    retryCount: 0
+                };
+                
+                const request = store.add(imageRecord);
+                
+                request.onsuccess = () => {
+                    resolve(imageRecord.id);
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        }
+
+        // ดึงรูปภาพที่ยังไม่ได้ซิงค์
+        async function getUnsyncedImages() {
+            const db = await openDatabase();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('images', 'readonly');
+                const store = transaction.objectStore('images');
+                const index = store.index('synced');
+                const range = IDBKeyRange.only(false);
+                
+                const request = index.openCursor(range);
+                const images = [];
+                
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        images.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        resolve(images);
+                    }
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        }
+
+        // ทำเครื่องหมายว่ารูปภาพซิงค์สำเร็จแล้ว
+        async function markImageAsSynced(imageId) {
+            const db = await openDatabase();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('images', 'readwrite');
+                const store = transaction.objectStore('images');
+                
+                const request = store.get(imageId);
+                
+                request.onsuccess = (event) => {
+                    const image = event.target.result;
+                    if (image) {
+                        image.synced = true;
+                        const updateRequest = store.put(image);
+                        updateRequest.onsuccess = () => resolve();
+                        updateRequest.onerror = () => reject(updateRequest.error);
+                    } else {
+                        reject(new Error('Image not found'));
+                    }
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        }
+
+        // ลบรูปภาพที่ซิงค์สำเร็จแล้ว
+        async function cleanupSyncedImages() {
+            const db = await openDatabase();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('images', 'readwrite');
+                const store = transaction.objectStore('images');
+                const index = store.index('synced');
+                const range = IDBKeyRange.only(true);
+                
+                const request = index.openCursor(range);
+                
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        store.delete(cursor.primaryKey);
+                        cursor.continue();
+                    } else {
+                        resolve();
+                    }
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        }
 
         // แก้ไขฟังก์ชัน refreshData
         function refreshData() {

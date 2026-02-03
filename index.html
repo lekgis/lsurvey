@@ -2360,6 +2360,59 @@
         // โหลดคิวเมื่อแอปเริ่มทำงาน
         loadSyncQueueFromStorage();
 
+        // เพิ่มปุ่มตรวจสอบสถานะซิงค์ในเมนูฟันเฟือง
+        // ในฟังก์ชัน toggleSettingsMenu ให้เพิ่มปุ่มใหม่:
+
+        /*
+        <button onclick="checkSyncStatus()" class="map-btn p-3 w-48 bg-gradient-to-r from-gray-400 to-gray-600 text-white hover:scale-105 transition-all shadow-lg flex items-center justify-start gap-2 text-left">
+            <i data-lucide="sync" class="w-5 h-5"></i>
+            <span class="text-xs font-bold">ตรวจสอบสถานะซิงค์</span>
+        </button>
+        */
+
+        // ฟังก์ชันตรวจสอบสถานะ
+        function checkSyncStatus() {
+            closeSettingsMenu();
+            
+            const pending = syncQueue.filter(i => i.status === 'pending').length;
+            const failed = syncQueue.filter(i => i.status === 'failed').length;
+            const success = syncQueue.filter(i => i.status === 'success').length;
+            
+            let message = `📊 สถานะการซิงค์ข้อมูล:\n`;
+            message += `✅ สำเร็จ: ${success} รายการ\n`;
+            message += `⏳ รอซิงค์: ${pending} รายการ\n`;
+            message += `❌ ล้มเหลว: ${failed} รายการ`;
+            
+            if (pending > 0) {
+                message += `\n\n⚠️ มีข้อมูลที่ยังไม่ได้ซิงค์!`;
+            }
+            
+            alert(message);
+            
+            // ถ้ามีข้อมูลรอซิงค์ ถามว่าต้องการซิงค์เลยไหม
+            if (pending > 0 && isOnline) {
+                if (confirm(`ต้องการซิงค์ข้อมูล ${pending} รายการที่รออยู่เลยหรือไม่?`)) {
+                    processSyncQueue();
+                }
+            }
+        }
+
+        // แสดงจำนวนข้อมูลที่รอซิงค์ในปุ่มฟันเฟือง
+        function updateSyncBadge() {
+            const pending = syncQueue.filter(i => i.status === 'pending').length;
+            const badge = document.getElementById('settings-badge');
+            
+            if (pending > 0) {
+                badge.textContent = pending > 9 ? '9+' : pending;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // เรียกใช้ทุกครั้งที่มีการเปลี่ยนแปลงคิว
+        setInterval(updateSyncBadge, 1000);
+
         // แก้ไขฟังก์ชัน refreshData
         function refreshData() {
             const refreshBtn = document.getElementById('btn-refresh');

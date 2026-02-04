@@ -2468,19 +2468,32 @@
         }
 
         // เรียกใช้เมื่อแอปเริ่มทำงาน
-        window.onload = async () => {
+        // ใช้ window.addEventListener แทน window.onload เพื่อป้องกันการทับซ้อน
+        window.addEventListener('load', async () => {
+            // 1. เริ่มต้นแผนที่และไอคอน
             initMap();
             lucide.createIcons();
             loadExistingData();
             
-            // ตรวจสอบและซิงค์ข้อมูลที่ค้างอยู่
+            // 2. ตรวจสอบและซิงค์ข้อมูลที่ค้างอยู่ (สำคัญสำหรับระบบออฟไลน์)
             await checkAndSyncOnStartup();
             
-            // ตรวจสอบสถานะการเชื่อมต่อทุก 30 วินาที
+            // 3. อัปเดตจุดแจ้งเตือนจำนวนข้อมูลที่รอซิงค์
             setInterval(() => {
                 updateSyncBadge();
             }, 1000);
-        };
+            
+            // 4. ลงทะเบียน Service Worker สำหรับแคชไทล์
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            }
+        });
 
         // แสดงจำนวนข้อมูลที่รอซิงค์ในปุ่มฟันเฟือง
         function updateSyncBadge() {
@@ -2670,23 +2683,6 @@
             });
         }
 
-        window.onload = () => {
-            initMap();
-            lucide.createIcons();
-            loadExistingData();
-        };
-        // ลงทะเบียน Service Worker สำหรับแคชไทล์
-        if ('serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
-              .then((registration) => {
-                console.log('Service Worker registered:', registration.scope);
-              })
-              .catch((error) => {
-                console.log('Service Worker registration failed:', error);
-              });
-          });
-        }
           
         // แจ้งเตือนให้ติดตั้งแอป (ตัวอย่าง)
         window.addEventListener('beforeinstallprompt', (e) => {

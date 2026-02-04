@@ -1271,6 +1271,15 @@
             // ดึงพิกัด
             data.lat_long = document.getElementById('latlng-display').innerText;
             
+            // ✅ ประกาศ type และ rowKey ทันที (ก่อนส่วนจัดการรูปภาพ)
+            const markerType = editingMarker._popupData.type; // เปลี่ยนชื่อเพื่อหลีกเลี่ยงความสับสน
+            const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
+            
+            if (!rowKey) {
+                alert("ไม่พบข้อมูลสำหรับอัปเดต");
+                return;
+            }
+            
             // จัดการรูปภาพ
             let imageBase64 = "";
             let imageFilename = null;
@@ -1279,14 +1288,15 @@
             if (fileInput && fileInput.files[0]) {
                 const file = fileInput.files[0];
                 
-                // ✅ สร้างฟังก์ชันปรับขนาดรูปภาพ
-                const resizeImage = (file, maxWidth = 1500, maxHeight = 1500) => {
+                // ✅ ใช้ markerType ที่ประกาศไว้แล้ว
+                const maxSize = markerType === 'building' ? 1500 : 2000; // สิ่งปลูกสร้าง 1500, ป้าย 2000
+
+                const resizeImage = (file, maxWidth = maxSize, maxHeight = maxSize) => {
                     return new Promise((resolve, reject) => {
                         const reader = new FileReader();
                         reader.onload = (e) => {
                             const img = new Image();
                             img.onload = () => {
-                                // คำนวณขนาดใหม่โดยรักษาสัดส่วน
                                 let width = img.width;
                                 let height = img.height;
                                 
@@ -1302,7 +1312,6 @@
                                     }
                                 }
                                 
-                                // สร้าง canvas สำหรับปรับขนาด
                                 const canvas = document.createElement('canvas');
                                 canvas.width = width;
                                 canvas.height = height;
@@ -1310,7 +1319,6 @@
                                 const ctx = canvas.getContext('2d');
                                 ctx.drawImage(img, 0, 0, width, height);
                                 
-                                // แปลงเป็น base64 (คุณภาพ 85%)
                                 const resizedBase64 = canvas.toDataURL(file.type, 0.85);
                                 resolve(resizedBase64);
                             };
@@ -1323,19 +1331,19 @@
                 };
                 
                 try {
-                    // ✅ ปรับขนาดรูปภาพเป็น 1024 พิกเซล
-                    imageBase64 = await resizeImage(file, 1500, 1500);
+                    imageBase64 = await resizeImage(file, maxSize, maxSize);
                     
-                    // ตัดข้อมูล "data:image/jpeg;base64," ออก
+                    // ตัด prefix ออก
                     const base64Data = imageBase64.split(',')[1];
                     imageBase64 = `${file.type};base64,${base64Data}`;
                     
                     imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
                     
-                    console.log(`รูปภาพถูกปรับขนาดเป็น 1024 พิกเซล: ${imageFilename}`);
+                    // ✅ แก้ไขข้อความให้ตรงกับขนาดจริง
+                    console.log(`รูปภาพถูกปรับขนาดเป็น ${maxSize} พิกเซล: ${imageFilename}`);
                 } catch (err) {
                     console.error('Error resizing image:', err);
-                    // หากปรับขนาดไม่สำเร็จ ให้ใช้รูปภาพเดิม
+                    // Fallback: ใช้รูปเดิม
                     const arrayBuffer = await file.arrayBuffer();
                     const bytes = [...new Uint8Array(arrayBuffer)];
                     const binary = bytes.map(b => String.fromCharCode(b)).join('');
@@ -1344,27 +1352,15 @@
                 }
             }
             
-            // หาประเภทและคีย์
-            const type = editingMarker._popupData.type;
-            const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
-            
-            if (!rowKey) {
-                alert("ไม่พบข้อมูลสำหรับอัปเดต");
-                return;
-            }
-            
-            // ✅ ปิดหน้าต่างทันที (ไม่รอการอัปโหลด)
+            // ✅ ปิดหน้าต่างทันที
             closePanel();
-            
-            // ✅ แสดงแจ้งเตือนแบบไม่บล็อกการทำงาน
             showNotificationLeft('กำลังบันทึกข้อมูล...', 'info');
             
             try {
-                // ✅ ตรวจสอบสถานะออนไลน์/ออฟไลน์
+                // ✅ ใช้ markerType แทนการประกาศใหม่
                 if (!isOnline || !navigator.onLine) {
-                    // ถ้าออฟไลน์ → บันทึกลงคิวทันที
                     if (imageBase64) {
-                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, type);
+                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, markerType);
                         console.log(`รูปภาพถูกบันทึกไว้ในมือถือ (ID: ${imageId})`);
                     }
                     
@@ -1374,11 +1370,11 @@
                         textData.imageFilename = imageFilename;
                     }
                     
-                    const result = await sendDataWithRetry('update', type, textData, rowKey);
+                    const result = await sendDataWithRetry('update', markerType, textData, rowKey);
                     
                     if (result.success) {
                         editingMarker._popupData = { ...editingMarker._popupData, ...data };
-                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
                         await loadExistingData();
                         showNotificationLeft('บันทึกข้อมูลเรียบร้อยแล้ว! (รูปภาพจะถูกอัปโหลดเมื่อออนไลน์)', 'success');
                     } else if (result.queued) {
@@ -1388,23 +1384,23 @@
                             queued: true,
                             queueId: result.queueId
                         };
-                        setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                        setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
                         showNotificationLeft('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                     }
                     return;
                 }
                 
-                // ✅ ถ้าออนไลน์ → ส่งข้อมูลทันที (แต่ไม่บล็อก UI)
+                // ✅ ออนไลน์: ส่งข้อมูลทันที
                 if (imageBase64) {
                     data.image = imageBase64;
                     data.fileName = imageFilename;
                 }
                 
-                const result = await sendDataWithRetry('update', type, data, rowKey);
+                const result = await sendDataWithRetry('update', markerType, data, rowKey);
                 
                 if (result.success) {
                     editingMarker._popupData = { ...editingMarker._popupData, ...data };
-                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
                     await loadExistingData();
                     showNotificationLeft('บันทึกข้อมูลเรียบร้อยแล้ว!', 'success');
                 } else if (result.queued) {
@@ -1414,23 +1410,22 @@
                         queued: true,
                         queueId: result.queueId
                     };
-                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
                     showNotificationLeft('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
                 
             } catch (err) {
                 console.error("Error saving data:", err);
                 
-                // ✅ แม้เกิดข้อผิดพลาด ก็เก็บลงคิวทันที
                 try {
                     const textData = { ...data };
                     if (imageBase64) {
-                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, type);
+                        const imageId = await saveImageToDB(imageBase64, imageFilename, rowKey, markerType);
                         textData.hasImage = true;
                         textData.imageFilename = imageFilename;
                     }
                     
-                    const queueId = addToSyncQueue('update', type, textData, rowKey);
+                    const queueId = addToSyncQueue('update', markerType, textData, rowKey);
                     
                     editingMarker._popupData = { 
                         ...editingMarker._popupData, 
@@ -1438,7 +1433,7 @@
                         queued: true,
                         queueId: queueId
                     };
-                    setupMarkerPopup(editingMarker, editingMarker._popupData, type);
+                    setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
                     showNotificationLeft('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 } catch (queueErr) {
                     console.error("Failed to save to queue:", queueErr);

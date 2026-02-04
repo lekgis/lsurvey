@@ -928,7 +928,6 @@
         }
 
         // แก้ไขฟังก์ชัน updateMarkerPosition
-        // แก้ไขฟังก์ชัน updateMarkerPosition
         async function updateMarkerPosition(marker, data, newLatLng) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
@@ -990,7 +989,7 @@
                     setTimeout(() => {
                         refreshBtn.classList.remove('refresh-success');
                         enableRefreshButton();
-                    }, 2000);
+                    }, 500);
                     
                     console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
                     showNotificationLeft('อัปเดตตำแหน่งเรียบร้อยแล้ว!', 'success');
@@ -1099,7 +1098,7 @@
                     setTimeout(() => {
                         successMsg.classList.add('animate-fade-out');
                         setTimeout(() => successMsg.remove(), 300);
-                    }, 2000);
+                    }, 500);
                     
                     surveyLayers.removeLayer(marker);
                     await loadExistingData();
@@ -1109,7 +1108,7 @@
                     setTimeout(() => {
                         refreshBtn.classList.remove('refresh-success');
                         enableRefreshButton();
-                    }, 2000);
+                    }, 500);
                     
                     console.log("ลบข้อมูลเรียบร้อยแล้ว");
                 } else {
@@ -1133,7 +1132,7 @@
                 setTimeout(() => {
                     errorMsg.classList.add('animate-fade-out');
                     setTimeout(() => errorMsg.remove(), 300);
-                }, 3000);
+                }, 500);
                 
                 throw err;
             }
@@ -1456,7 +1455,7 @@
             // ปิดอัตโนมัติหลัง 3 วินาที
             setTimeout(() => {
                 closeEditModeModal();
-            }, 3000);
+            }, 1000);
         }
 
         // ปิดหน้าต่างโหมดแก้ไข
@@ -1919,7 +1918,7 @@
           setTimeout(() => {
             notification.classList.add('animate-fade-out');
             setTimeout(() => notification.remove(), 300);
-          }, 3000);
+          }, 500);
         }
         /**
          * แสดงมาร์กเกอร์ทั้งหมด (สำหรับข้อมูลน้อย)
@@ -2153,7 +2152,7 @@
             setTimeout(() => {
                 status.style.opacity = '0';
                 setTimeout(() => status.remove(), 300);
-            }, 5000);
+            }, 1000);
         }
 
         // ฟังก์ชันตรวจสอบการเชื่อมต่อ
@@ -2221,7 +2220,6 @@
             }
             
             let retryCount = 0;
-            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
             
             while (retryCount < maxRetries) {
                 try {
@@ -2242,7 +2240,7 @@
                             body.append('payload', JSON.stringify(textData));
                         }
                         
-                        // ✅ ส่งรูปภาพไปยังเซิร์ฟเวอร์ทันที (ไม่บันทึกลง IndexedDB เท่านั้น)
+                        // ✅ ส่งรูปภาพไปยังเซิร์ฟเวอร์ทันที
                         if (image && fileName) {
                             body.append('image', image);
                             body.append('fileName', fileName);
@@ -2257,7 +2255,8 @@
                     });
                     
                     if (res.ok) {
-                        return { success: true,  await res.json() };
+                        // ✅ แก้ไขตรงนี้: เพิ่มชื่อคีย์ 'data'
+                        return { success: true, data: await res.json() };
                     } else {
                         throw new Error(`HTTP ${res.status}`);
                     }
@@ -2265,7 +2264,7 @@
                     retryCount++;
                     
                     if (retryCount >= maxRetries) {
-                        // ✅ หากล้มเหลวทุกครั้ง ให้บันทึกลงคิว (รวมรูปภาพด้วย)
+                        // ✅ หากล้มเหลวทุกครั้ง ให้บันทึกลงคิว
                         const queueId = addToSyncQueue(action, type, data, rowKey);
                         console.error(`Failed after ${maxRetries} retries. Saved to queue: ${queueId}`);
                         return { success: false, queued: true, queueId: queueId };
@@ -2273,7 +2272,9 @@
                     
                     const waitTime = 1000 * Math.pow(2, retryCount);
                     console.log(`Retry ${retryCount}/${maxRetries} after ${waitTime}ms...`);
-                    await delay(waitTime);
+                    
+                    // รอเวลาที่กำหนด
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
                 }
             }
         }
@@ -2474,7 +2475,7 @@
                         setTimeout(() => {
                             showNotification('กำลังซิงค์ข้อมูล...', 'info');
                             processSyncQueue();
-                        }, 2000);
+                        }, 1000);
                     } else {
                         showNotification('⚠️ อยู่ในโหมดออฟไลน์ - รอการเชื่อมต่อ', 'warning');
                     }
@@ -2719,7 +2720,7 @@
             setTimeout(() => {
                 notif.classList.add('animate-fade-out');
                 setTimeout(() => notif.remove(), 300);
-            }, 3000);
+            }, 500);
         }
 
         // ตัวแปรเก็บข้อมูลล่าสุด
@@ -2817,7 +2818,7 @@
         // ตัวแปรควบคุมการอัปเดตอัตโนมัติ
         let autoUpdateInterval = null;
 
-        // เริ่มการอัปเดตอัตโนมัติ (ทุก 30 วินาที)
+        // เริ่มการอัปเดตอัตโนมัติ (ทุก 10 วินาที)
         function startAutoUpdate() {
             if (autoUpdateInterval) clearInterval(autoUpdateInterval);
             
@@ -2825,7 +2826,7 @@
                 if (isOnline && navigator.onLine) {
                     smartLoadData();
                 }
-            }, 30000); // 30 วินาที
+            }, 1000); // 30 วินาที
         }
 
         // หยุดการอัปเดตอัตโนมัติ
@@ -2852,6 +2853,7 @@
             stopAutoUpdate();
         };
 
+        // แก้ไขฟังก์ชัน refreshData
         function refreshData() {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');

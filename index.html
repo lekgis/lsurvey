@@ -2577,34 +2577,85 @@
             });
         }
 
-        // บันทึกรูปภาพลงใน IndexedDB
+        // บันทึกรูปภาพลงใน IndexedDB (พร้อมตรวจสอบพื้นที่และจัดการข้อผิดพลาด)
         async function saveImageToDB(imageData, filename, relatedId, type) {
-            const db = await openDatabase();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction('images', 'readwrite');
-                const store = transaction.objectStore('images');
+            try {
+                // ✅ ตรวจสอบขนาดรูปภาพก่อนบันทึก
+                const estimateSize = Math.ceil(imageData.length * 0.75); // ประมาณขนาดจริง (ลบ 25% จาก base64)
                 
-                const imageRecord = {
-                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    filename: filename,
-                    data: imageData, // base64 string
-                    relatedId: relatedId,
-                    type: type, // 'building' หรือ 'sign'
-                    timestamp: new Date().toISOString(),
-                    synced: false,
-                    retryCount: 0
-                };
+                if (estimateSize > 3 * 1024 * 1024) { // เตือนถ้าเกิน 3MB
+                    showNotificationLeft('⚠️ รูปภาพใหญ่เกินไป อาจใช้พื้นที่มาก', 'warning');
+                }
                 
-                const request = store.add(imageRecord);
-                
-                request.onsuccess = () => {
-                    resolve(imageRecord.id);
-                };
-                
-                request.onerror = () => {
-                    reject(request.error);
-                };
-            });
+                const db = await openDatabase();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction('images', 'readwrite');
+                    const store = transaction.objectStore('images');
+                    
+                    const imageRecord = {
+                        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        filename: filename,
+                         imageData, // base64 string
+                        relatedId: relatedId,
+                        type: type, // 'building' หรือ 'sign'
+                        timestamp: new Date().toISOString(),
+                        synced: false,
+                        retryCount: 0
+                    };
+                    
+                    const request = store.add(imageRecord);
+                    
+                    request.onsuccess = () => {
+                        console.log(`บันทึกรูปภาพสำเร็จ: ${filename} (${Math.round(estimateSize / 1024)} KB)`);
+                        resolve(imageRecord.id);
+                    };
+                    
+                    request.onerror = (event) => {
+                        // ✅ ตรวจสอบข้อผิดพลาดพื้นที่เต็ม
+                        if (event.target.error && event.target.error.name === 'QuotaExceededError') {
+                            showNotificationLeft(
+                                '❌ พื้นที่เก็บข้อมูลเต็ม! โปรดซิงค์ข้อมูลก่อนถ่ายรูปเพิ่ม',
+                                'error'
+                            );
+                            reject(new Error('Storage quota exceeded'));
+                        } else {
+                            console.error('Error saving image to DB:', event.target.error);
+                            reject(event.target.error);
+                        }
+                    };
+                });
+            } catch (err) {
+                console.error('Error in saveImageToDB:', err);
+                throw err;
+            }
+        }
+
+        async function checkStorageSpace() {
+            try {
+                if ('storage' in navigator && 'estimate' in navigator.storage) {
+                    const estimate = await navigator.storage.estimate();
+                    const usage = estimate.usage || 0;
+                    const quota = estimate.quota || 50 * 1024 * 1024; // 50MB default
+                    
+                    const usagePercent = (usage / quota) * 100;
+                    
+                    if (usagePercent > 80) {
+                        showNotificationLeft(
+                            `⚠️ พื้นที่เก็บข้อมูลเหลือน้อย (${Math.round(100 - usagePercent)}%)`,
+                            'warning'
+                        );
+                    }
+                    
+                    if (usagePercent > 95) {
+                        showNotificationLeft(
+                            `❌ พื้นที่เก็บข้อมูลเกือบเต็ม! โปรดซิงค์ข้อมูล`,
+                            'error'
+                        );
+                    }
+                }
+            } catch (err) {
+                console.error('Error checking storage:', err);
+            }
         }
 
         // ดึงรูปภาพที่ยังไม่ได้ซิงค์

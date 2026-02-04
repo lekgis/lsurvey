@@ -889,7 +889,7 @@
                     // 2. ลบมาร์กเกอร์ชั่วคราวหลังจากข้อมูลจริงแสดงแล้ว
                     // (ทำในฟังก์ชัน loadExistingData ด้านล่าง ผ่าน setTimeout)
                     
-                    showNotification('เพิ่มจุดสำเร็จ!', 'success');
+                    showNotificationLeft('เพิ่มจุดสำเร็จ!', 'success');
                 } else if (result.queued) {
                     // ถ้าอยู่ในคิว
                     refreshIcon.classList.remove('animate-spin');
@@ -903,7 +903,7 @@
                     };
                     setupMarkerPopup(marker, marker._popupData, type);
                     await loadExistingData();
-                    showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
+                    showNotificationLeft('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
             } catch (err) {
                 refreshIcon.classList.remove('animate-spin');
@@ -916,7 +916,7 @@
                     failed: true
                 };
                 setupMarkerPopup(marker, marker._popupData, type);
-                showNotification("การบันทึกล้มเหลว: " + err.message, 'error');
+                showNotificationLeft("การบันทึกล้มเหลว: " + err.message, 'error');
             }
         }
 
@@ -939,18 +939,18 @@
                 if (result.success) {
                     surveyLayers.removeLayer(marker);
                     await loadExistingData();
-                    showNotification('ลบข้อมูลเรียบร้อยแล้ว!', 'success');
+                    showNotificationLeft('ลบข้อมูลเรียบร้อยแล้ว!', 'success');
                     
                 } else if (result.queued) {
                     // เก็บไว้ในคิว แต่ลบจากแผนที่ก่อน
                     surveyLayers.removeLayer(marker);
                     await loadExistingData();
-                    showNotification('ลบข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
+                    showNotificationLeft('ลบข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
                 
             } catch (err) {
                 console.error("Error deleting marker:", err);
-                showNotification('เกิดข้อผิดพลาดในการลบ!', 'error');
+                showNotificationLeft('เกิดข้อผิดพลาดในการลบ!', 'error');
                 throw err;
             }
         }
@@ -1646,7 +1646,7 @@
           closeSettingsMenu();
           
           // แสดงข้อความแจ้งเตือน
-          showNotification('กำลังเตรียมข้อมูลสิ่งปลูกสร้าง...', 'info');
+          showNotificationLeft('กำลังเตรียมข้อมูลสิ่งปลูกสร้าง...', 'info');
           
           try {
             // ดึงข้อมูลจากเซิร์ฟเวอร์
@@ -1668,13 +1668,13 @@
               window.URL.revokeObjectURL(url);
               document.body.removeChild(a);
               
-              showNotification('ดาวน์โหลดไฟล์สิ่งปลูกสร้างสำเร็จ!', 'success');
+              showNotificationLeft('ดาวน์โหลดไฟล์สิ่งปลูกสร้างสำเร็จ!', 'success');
             } else {
               throw new Error('ข้อมูลไม่ถูกต้อง');
             }
           } catch (err) {
             console.error('Error exporting buildings:', err);
-            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
+            showNotificationLeft('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
           }
         }
 
@@ -1684,7 +1684,7 @@
         async function exportSignGeoJSON() {
           closeSettingsMenu();
           
-          showNotification('กำลังเตรียมข้อมูลป้าย...', 'info');
+          showNotificationLeft('กำลังเตรียมข้อมูลป้าย...', 'info');
           
           try {
             const res = await fetch(`${CONFIG.SCRIPT_URL}?action=exportGeoJSON&type=sign`);
@@ -1704,13 +1704,13 @@
               window.URL.revokeObjectURL(url);
               document.body.removeChild(a);
               
-              showNotification('ดาวน์โหลดไฟล์ป้ายสำเร็จ!', 'success');
+              showNotificationLeft('ดาวน์โหลดไฟล์ป้ายสำเร็จ!', 'success');
             } else {
               throw new Error('ข้อมูลไม่ถูกต้อง');
             }
           } catch (err) {
             console.error('Error exporting signs:', err);
-            showNotification('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
+            showNotificationLeft('เกิดข้อผิดพลาดในการส่งออกข้อมูล', 'error');
           }
         }
 
@@ -1720,7 +1720,7 @@
         async function loadBuildingImages() {
           closeSettingsMenu();
           
-          showNotification('กำลังโหลดรูปภาพสิ่งปลูกสร้าง...', 'info');
+          showNotificationLeft('กำลังโหลดรูปภาพสิ่งปลูกสร้าง...', 'info');
           
           try {
             // ดึงข้อมูลสิ่งปลูกสร้างทั้งหมด
@@ -1732,7 +1732,7 @@
             const buildingsWithImages = buildings.filter(b => b.image && b.image.trim() !== '');
             
             if (buildingsWithImages.length === 0) {
-              showNotification('ไม่พบรูปภาพสิ่งปลูกสร้าง', 'warning');
+              showNotificationLeft('ไม่พบรูปภาพสิ่งปลูกสร้าง', 'warning');
               return;
             }
             
@@ -1741,7 +1741,7 @@
             
           } catch (err) {
             console.error('Error loading building images:', err);
-            showNotification('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
+            showNotificationLeft('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
           }
         }
 
@@ -1751,7 +1751,7 @@
         async function loadSignImages() {
           closeSettingsMenu();
           
-          showNotification('กำลังโหลดรูปภาพป้าย...', 'info');
+          showNotificationLeft('กำลังโหลดรูปภาพป้าย...', 'info');
           
           try {
             const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
@@ -1761,7 +1761,7 @@
             const signsWithImages = signs.filter(s => s.picture && s.picture.trim() !== '');
             
             if (signsWithImages.length === 0) {
-              showNotification('ไม่พบรูปภาพป้าย', 'warning');
+              showNotificationLeft('ไม่พบรูปภาพป้าย', 'warning');
               return;
             }
             
@@ -1769,7 +1769,7 @@
             
           } catch (err) {
             console.error('Error loading sign images:', err);
-            showNotification('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
+            showNotificationLeft('เกิดข้อผิดพลาดในการโหลดรูปภาพ', 'error');
           }
         }
 
@@ -1892,7 +1892,7 @@
         /**
          * แสดงแจ้งเตือน
          */
-        function showNotification(message, type = 'info') {
+        function showNotificationLeft(message, type = 'info') {
           const colors = {
             info: 'bg-blue-500',
             success: 'bg-green-500',
@@ -1908,7 +1908,7 @@
           };
           
           const notification = document.createElement('div');
-          notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in`;
+          notification.className = `fixed top-4 left-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-[2000] animate-fade-in`;
           notification.innerHTML = `
             <i data-lucide="${icons[type]}" class="w-5 h-5 inline mr-2"></i>
             ${message}
@@ -2182,7 +2182,7 @@
             saveSyncQueueToStorage();
             
             // แสดงแจ้งเตือน
-            showNotification(`บันทึกข้อมูลไว้ในมือถือ (${syncQueue.length} รายการรอซิงค์)`, 'warning');
+            showNotificationLeft(`บันทึกข้อมูลไว้ในมือถือ (${syncQueue.length} รายการรอซิงค์)`, 'warning');
             
             return queueItem.id;
         }
@@ -2283,7 +2283,7 @@
         async function processSyncQueue() {
             if (!isOnline || syncQueue.length === 0) return;
             
-            showNotification(`กำลังซิงค์ข้อมูล (${syncQueue.length} รายการ)...`, 'info');
+            showNotificationLeft(`กำลังซิงค์ข้อมูล (${syncQueue.length} รายการ)...`, 'info');
             
             const failedItems = [];
             
@@ -2333,13 +2333,13 @@
             const pendingCount = syncQueue.filter(i => i.status === 'pending').length;
             
             if (pendingCount === 0 && failedItems.length === 0) {
-                showNotification(`ซิงค์ข้อมูลสำเร็จทั้งหมด!`, 'success');
+                showNotificationLeft(`ซิงค์ข้อมูลสำเร็จทั้งหมด!`, 'success');
             } else if (pendingCount > 0) {
-                showNotification(`ซิงค์ข้อมูล ${successCount} รายการ (${pendingCount} รายการรอซิงค์)`, 'warning');
+                showNotificationLeft(`ซิงค์ข้อมูล ${successCount} รายการ (${pendingCount} รายการรอซิงค์)`, 'warning');
             }
             
             if (failedItems.length > 0) {
-                showNotification(`มี ${failedItems.length} รายการที่ซิงค์ไม่สำเร็จ`, 'error');
+                showNotificationLeft(`มี ${failedItems.length} รายการที่ซิงค์ไม่สำเร็จ`, 'error');
             }
         }
 
@@ -2470,7 +2470,7 @@
                 if (pendingCount > 0 || unsyncedImages.length > 0) {
                     const totalPending = pendingCount + unsyncedImages.length;
                     
-                    showNotification(
+                    showNotificationLeft(
                         `พบข้อมูลที่รอซิงค์ ${totalPending} รายการ`, 
                         'warning'
                     );
@@ -2478,11 +2478,11 @@
                     // ถ้าออนไลน์ → เริ่มซิงค์ทันที
                     if (isOnline) {
                         setTimeout(() => {
-                            showNotification('กำลังซิงค์ข้อมูล...', 'info');
+                            showNotificationLeft('กำลังซิงค์ข้อมูล...', 'info');
                             processSyncQueue();
                         }, 1000);
                     } else {
-                        showNotification('⚠️ อยู่ในโหมดออฟไลน์ - รอการเชื่อมต่อ', 'warning');
+                        showNotificationLeft('⚠️ อยู่ในโหมดออฟไลน์ - รอการเชื่อมต่อ', 'warning');
                     }
                 }
             } catch (err) {

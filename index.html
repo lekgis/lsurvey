@@ -2931,7 +2931,7 @@ function loadVisibleMarkers() {
     const visibleMarkers = [];
     
     // ✅ เพิ่ม Buffer Zone รอบขอบเขตที่มองเห็น
-    const bufferRatio = isMobile() ? 1.0 : 1.0; // มือถือ 50%, คอม 100%
+    const bufferRatio = isMobile() ? 0.5 : 1.0; // มือถือ 50%, คอม 100%
     const bufferedBounds = bounds.pad(bufferRatio);
     
     // ล้างมาร์กเกอร์ทั้งหมด

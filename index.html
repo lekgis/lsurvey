@@ -780,61 +780,6 @@
             btn.style.cursor = 'pointer';
         }
 
-        // แก้ไขฟังก์ชัน updateMarkerPosition
-        async function updateMarkerPosition(marker, data, newLatLng) {
-            const refreshBtn = document.getElementById('btn-refresh');
-            const refreshIcon = document.getElementById('refresh-icon');
-            
-            // ปิดการใช้งานปุ่ม
-            disableRefreshButton();
-            refreshIcon.classList.add('animate-spin');
-            
-            const oldLatLng = data.lat_long;
-            const newLatLngStr = `${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
-            
-            const rowKey = data._row_num || data.id;
-            const type = data.type || (data.building_c ? 'building' : 'sign');
-            
-            if (!rowKey) {
-                alert("ไม่พบข้อมูลสำหรับอัปเดต");
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                return;
-            }
-            
-            const body = new URLSearchParams();
-            body.append('action', 'updatePosition');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            body.append('lat_long', newLatLngStr);
-            
-            try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
-                if (res.ok) {
-                    data.lat_long = newLatLngStr;
-                    setupMarkerPopup(marker, data, type);
-                    await loadExistingData();
-                    
-                    refreshIcon.classList.remove('animate-spin');
-                    refreshBtn.classList.add('refresh-success');
-                    setTimeout(() => {
-                        refreshBtn.classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
-                    console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
-                } else {
-                    throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
-                }
-            } catch (err) {
-                refreshIcon.classList.remove('animate-spin');
-                enableRefreshButton();
-                console.error("Error updating position:", err);
-                alert("เกิดข้อผิดพลาดในการอัปเดตตำแหน่ง");
-                const oldPos = L.latLng(oldLatLng.split(',').map(Number));
-                marker.setLatLng(oldPos);
-            }
-        }
 
         // ข้อ 2: แสดงปุ่มยืนยัน
         function showConfirmButton() {
@@ -870,15 +815,14 @@
         async function backgroundUpload(latlng, type, marker) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
-            
-            // ปิดการใช้งานปุ่ม
             disableRefreshButton();
             refreshIcon.classList.add('animate-spin');
             
             // สร้างข้อมูลพื้นฐาน
             const data = {
                 lat_long: `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`,
-                date_added: new Date().toISOString()
+                date_added: new Date().toISOString(),
+                tempMarker: true // ✅ ทำเครื่องหมายว่าเป็นมาร์กเกอร์ชั่วคราว
             };
             
             // เพิ่มข้อมูลเริ่มต้น
@@ -895,45 +839,55 @@
                 data.b_area = '0';
             }
             
+            // ✅ ทำเครื่องหมายในมาร์กเกอร์ว่าเป็นชั่วคราว
+            marker._popupData = { ...data, type: type, tempMarker: true };
+            setupMarkerPopup(marker, marker._popupData, type);
+            
             try {
-                // ส่งข้อมูลพร้อมการลองใหม่
                 const result = await sendDataWithRetry('quickAdd', type, data);
                 
                 if (result.success) {
                     refreshIcon.classList.remove('animate-spin');
                     refreshBtn.classList.add('refresh-success');
-                    
                     setTimeout(() => {
                         refreshBtn.classList.remove('refresh-success');
                         enableRefreshButton();
                     }, 2000);
                     
-                    // อัปเดตข้อมูลในมาร์กเกอร์
-                    if (result.data && result.data.data && result.data.data.id) {
-                        data.id = result.data.data.id;
-                    }
-                    
-                    setupMarkerPopup(marker, { ...data, id: data.id || Date.now() }, type);
+                    // ✅ ลำดับที่ถูกต้อง (ตามที่คุณระบุ):
+                    // 1. โหลดข้อมูลใหม่ก่อน (เพื่อให้มีข้อมูลจริงแสดงบนแผนที่)
                     await loadExistingData();
+                    
+                    // 2. ลบมาร์กเกอร์ชั่วคราวหลังจากข้อมูลจริงแสดงแล้ว
+                    // (ทำในฟังก์ชัน loadExistingData ด้านล่าง ผ่าน setTimeout)
                     
                     showNotification('เพิ่มจุดสำเร็จ!', 'success');
-                    
                 } else if (result.queued) {
-                    // ข้อมูลถูกเก็บไว้ในคิวแล้ว
+                    // ถ้าอยู่ในคิว
                     refreshIcon.classList.remove('animate-spin');
                     enableRefreshButton();
-                    
-                    setupMarkerPopup(marker, { ...data, id: result.queueId, queued: true }, type);
+                    marker._popupData = {
+                        ...data,
+                        type: type,
+                        tempMarker: true,
+                        queued: true,
+                        queueId: result.queueId
+                    };
+                    setupMarkerPopup(marker, marker._popupData, type);
                     await loadExistingData();
-                    
                     showNotification('บันทึกข้อมูลไว้ในมือถือ (รอซิงค์)', 'warning');
                 }
-                
             } catch (err) {
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
-                marker.remove();
-                
+                // ไม่ลบมาร์กเกอร์ แต่ทำเครื่องหมายว่าล้มเหลว
+                marker._popupData = {
+                    ...data,
+                    type: type,
+                    tempMarker: true,
+                    failed: true
+                };
+                setupMarkerPopup(marker, marker._popupData, type);
                 showNotification("การบันทึกล้มเหลว: " + err.message, 'error');
             }
         }
@@ -2040,15 +1994,18 @@
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
                 const data = await res.json();
                 
-                // ✅ เก็บมาร์กเกอร์ที่กำลังรอซิงค์ไว้ก่อน
+                // ✅ เก็บมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวทั้งหมด
                 const pendingMarkers = [];
                 surveyLayers.eachLayer(layer => {
-                    if (layer._popupData && layer._popupData.queued) {
-                        pendingMarkers.push({
-                            latlng: layer.getLatLng(),
-                            data: layer._popupData,
-                            type: layer._popupData.type
-                        });
+                    if (layer._popupData) {
+                        // เก็บเฉพาะมาร์กเกอร์ที่รอซิงค์หรือมาร์กเกอร์ชั่วคราว
+                        if (layer._popupData.queued || layer._popupData.tempMarker) {
+                            pendingMarkers.push({
+                                latlng: layer.getLatLng(),
+                                data: layer._popupData,
+                                type: layer._popupData.type
+                            });
+                        }
                     }
                 });
                 
@@ -2096,7 +2053,7 @@
                     });
                 }
                 
-                // ✅ เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์กลับเข้ามา
+                // ✅ เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวกลับเข้ามา
                 pendingMarkers.forEach(marker => {
                     const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
                     m._popupData = marker.data;
@@ -2104,6 +2061,21 @@
                     m.addTo(surveyLayers);
                     if (isEditMode) enableMarkerDragging(m, marker.data);
                 });
+                
+                // ✅ ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว (หลังจากมาร์กเกอร์จริงแสดงแล้ว)
+                setTimeout(() => {
+                    surveyLayers.eachLayer(layer => {
+                        if (layer._popupData && layer._popupData.tempMarker && !layer._popupData.queued && !layer._popupData.failed) {
+                            // ตรวจสอบว่ามีมาร์กเกอร์จริงที่มีไอดีเดียวกันหรือไม่
+                            const hasRealMarker = allBuildings.some(b => b.id === layer._popupData.id) ||
+                                                 allSigns.some(s => s.id === layer._popupData.id);
+                            if (hasRealMarker) {
+                                surveyLayers.removeLayer(layer);
+                                console.log(`ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว: ${layer._popupData.id}`);
+                            }
+                        }
+                    });
+                }, 300); // รอ 300ms เพื่อให้มาร์กเกอร์จริงแสดงก่อน (เพิ่มจาก 100ms เพื่อรองรับเน็ตช้า)
                 
             } catch(e) {
                 console.error("Error loading data:", e);
@@ -2221,24 +2193,26 @@
                     }
                     
                     if (data) {
-                        // แยกข้อมูลรูปภาพออก (จะส่งผ่านระบบแยก)
+                        // ✅ แยกข้อมูลรูปภาพออก
                         const { image, fileName, ...textData } = data;
                         
+                        // ส่งข้อมูลข้อความ
                         if (Object.keys(textData).length > 0) {
                             body.append('payload', JSON.stringify(textData));
                         }
                         
-                        // ถ้ามีรูปภาพ → บันทึกลง IndexedDB
+                        // ✅ ส่งรูปภาพไปยังเซิร์ฟเวอร์ทันทีเมื่อออนไลน์ (ไม่บันทึกลง IndexedDB เท่านั้น)
                         if (image && fileName) {
-                            const imageId = await saveImageToDB(image, fileName, rowKey, type);
-                            console.log(`รูปภาพถูกบันทึกไว้ชั่วคราว (ID: ${imageId})`);
+                            body.append('image', image);
+                            body.append('fileName', fileName);
+                            console.log(`ส่งรูปภาพไปยังเซิร์ฟเวอร์: ${fileName}`);
                         }
                     }
                     
-                    const res = await fetch(CONFIG.SCRIPT_URL.trim(), { 
-                        method: 'POST', 
+                    const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
+                        method: 'POST',
                         body,
-                        timeout: action === 'updateImage' ? 60000 : 30000
+                        timeout: action === 'updateImage' || (data && data.image) ? 60000 : 30000
                     });
                     
                     if (res.ok) {
@@ -2246,16 +2220,14 @@
                     } else {
                         throw new Error(`HTTP ${res.status}`);
                     }
-                    
                 } catch (err) {
                     retryCount++;
-                    
                     if (retryCount >= maxRetries) {
+                        // ✅ หากล้มเหลวทุกครั้ง ให้บันทึกลงคิว (รวมรูปภาพด้วย)
                         const queueId = addToSyncQueue(action, type, data, rowKey);
                         console.error(`Failed after ${maxRetries} retries. Saved to queue: ${queueId}`);
                         return { success: false, queued: true, queueId: queueId };
                     }
-                    
                     const waitTime = 1000 * Math.pow(2, retryCount);
                     console.log(`Retry ${retryCount}/${maxRetries} after ${waitTime}ms...`);
                     await delay(waitTime);

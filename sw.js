@@ -152,7 +152,7 @@ async function cleanMapCache() {
   const keys = await cache.keys();
   
   // จำกัดจำนวนไทล์ในแคช (เช่น 100 ชิ้น)
-  const MAX_TILES = 100;
+  const MAX_TILES = 300;
   
   if (keys.length > MAX_TILES) {
     // ลบไทล์เก่าที่สุดออก
@@ -163,3 +163,4 @@ async function cleanMapCache() {
     console.log(`Cleaned map cache: deleted ${tilesToDelete.length} old tiles`);
   }
 }
+

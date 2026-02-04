@@ -1,6 +1,6 @@
 // ========== การตั้งค่าแคช ==========
-const APP_CACHE_NAME = 'gis-survey-app-v2';
-const MAP_CACHE_NAME = 'map-tiles-v2';
+const APP_CACHE_NAME = 'gis-survey-app-v1';
+const MAP_CACHE_NAME = 'map-tiles-v1';
 
 // ไฟล์แอปที่ต้องการแคช
 const urlsToCache = [
@@ -163,3 +163,4 @@ async function cleanMapCache() {
     console.log(`Cleaned map cache: deleted ${tilesToDelete.length} old tiles`);
   }
 }
+

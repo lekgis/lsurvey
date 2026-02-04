@@ -750,62 +750,46 @@
         function toggleEditMode() {
             isEditMode = !isEditMode;
             
+            const btnEdit = document.getElementById('btn-edit');
+            
             if (isEditMode) {
+                // ปิดเครื่องมือเพิ่มจุด
                 activeTool = null;
                 document.getElementById('btn-building').classList.remove('active-tool');
                 document.getElementById('btn-sign').classList.remove('active-tool');
-                document.getElementById('crosshair').classList.add('hidden');
-                document.getElementById('add-trigger-container').classList.add('hidden');
-            }
-            
-            const btn = document.getElementById('btn-edit');
-            btn.classList.toggle('active-edit', isEditMode);
-
-            // แปลงทุก marker → เป็น draggable marker (สร้างใหม่ทั้งหมด)
-            const markers = [];
-            surveyLayers.eachLayer(layer => {
-                // ✅ เปลี่ยนจาก L.CircleMarker เป็น L.Marker
-                if (layer instanceof L.Marker) {
-                    const data = layer._popupData;
-                    if (data) {
-                        markers.push({
-                            latlng: layer.getLatLng(),
-                            data: data,
-                            type: data.type
+                
+                // ✅ เพิ่มคลาส 'active-edit' ให้ปุ่ม "move" เป็นสีน้ำเงิน
+                btnEdit.classList.add('active-edit');
+                
+                // ✅ เปิดใช้งานการลากมาร์กเกอร์ทั้งหมด
+                surveyLayers.eachLayer(function(layer) {
+                    if (layer._popupData && layer.dragging && layer.dragging.enable) {
+                        layer.dragging.enable();
+                        
+                        // ผูกเหตุการณ์เมื่อลากเสร็จ
+                        layer.off('dragend');
+                        layer.on('dragend', async function(e) {
+                            const newLatLng = e.target.getLatLng();
+                            const marker = e.target;
+                            const data = marker._popupData;
+                            if (data) {
+                                await updateMarkerPosition(marker, data, newLatLng);
+                            }
                         });
                     }
-                    surveyLayers.removeLayer(layer);
-                }
-            });
-
-            // สร้างใหม่ทั้งหมดพร้อมเปิดใช้งาน dragging
-            markers.forEach(marker => {
-                const newMarker = createCircleMarker(
-                    marker.latlng,
-                    marker.type,
-                    isEditMode  // draggable
-                );
+                });
                 
-                // ผูกข้อมูลและป๊อปอัป
-                newMarker._popupData = marker.data;
-                setupMarkerPopup(newMarker, marker.data, marker.type);
-                newMarker.addTo(surveyLayers);
-                
-                // ผูกเหตุการณ์เมื่อเปิดโหมดแก้ไข
-                if (isEditMode) {
-                    newMarker.on('dragend', async (e) => {
-                        const newLatLng = e.target.getLatLng();
-                        const marker = e.target;
-                        const data = marker._popupData;
-                        if (data) {
-                            await updateMarkerPosition(marker, data, newLatLng);
-                        }
-                    });
-                }
-            });
-
-            if (isEditMode) {
                 showEditModeModal();
+            } else {
+                // ✅ ลบคลาส 'active-edit' ออกจากปุ่ม "move"
+                btnEdit.classList.remove('active-edit');
+                
+                // ✅ ปิดการลากมาร์กเกอร์ทั้งหมด
+                surveyLayers.eachLayer(function(layer) {
+                    if (layer.dragging && layer.dragging.disable) {
+                        layer.dragging.disable();
+                    }
+                });
             }
         }
 
@@ -1005,11 +989,11 @@
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
                 
-                showNotificationLeft('อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์)', 'warning');
+                console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
                 return;
             }
             
-            // ✅ ถ้าออนไลน์ → ส่งข้อมูลโดยตรง (เหมือนเวอร์ชันที่ทำงานได้)
+            // ✅ ถ้าออนไลน์ → ส่งข้อมูลทันที
             const body = new URLSearchParams();
             body.append('action', 'updatePosition');
             body.append('type', type);
@@ -1033,10 +1017,9 @@
                     setTimeout(() => {
                         refreshBtn.classList.remove('refresh-success');
                         enableRefreshButton();
-                    }, 500);
+                    }, 2000);
                     
                     console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
-                    showNotificationLeft('อัปเดตตำแหน่งเรียบร้อยแล้ว!', 'success');
                 } else {
                     throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
                 }
@@ -1044,14 +1027,16 @@
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
                 console.error("Error updating position:", err);
-                showNotificationLeft('เกิดข้อผิดพลาดในการอัปเดตตำแหน่ง', 'error');
                 
-                // คืนค่าตำแหน่งเดิม
-                const oldPos = L.latLng(oldLatLng.split(',').map(Number));
-                marker.setLatLng(oldPos);
-                data.lat_long = oldLatLng;
-                marker._popupData.lat_long = oldLatLng;
+                // ✅ หากเกิดข้อผิดพลาด ให้เก็บข้อมูลไว้ในคิวแทน
+                const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
+                
+                // อัปเดตข้อมูลในมาร์กเกอร์
+                data.lat_long = newLatLngStr;
+                marker._popupData.lat_long = newLatLngStr;
                 setupMarkerPopup(marker, data, type);
+                
+                console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
             }
         }
 
@@ -1182,24 +1167,6 @@
             }
         }
 
-        function createCircleMarker(latlng, type, isDraggable = false) {
-            const className = type === 'building' ? 'circle-building' : 'circle-sign';
-            const icon = L.divIcon({
-                className: `circle-marker ${className}`,
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
-            });
-            const marker = L.marker(latlng, {
-                icon: icon,
-                draggable: isDraggable,
-                zIndexOffset: 1000
-            });
-            
-            // เก็บข้อมูลไว้ใน marker สำหรับใช้ในการอัปเดต
-            marker._popupData = null;
-            
-            return marker;
-        }
 
         function openEditPanel(data, type, marker) {
             editingMarker = marker;
@@ -1520,7 +1487,7 @@
             // ปิดอัตโนมัติหลัง 3 วินาที
             setTimeout(() => {
                 closeEditModeModal();
-            }, 1000);
+            }, 3000);
         }
 
         // ปิดหน้าต่างโหมดแก้ไข
@@ -2046,19 +2013,28 @@
           });
         }
 
-        /**
-         * เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
-         */
+        // เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
         function enableMarkerDragging(marker, data) {
-          if (!isEditMode) return;
-          marker.dragging.enable();
-          marker.on('dragend', async (e) => {
-            const newLatLng = e.target.getLatLng();
-            const marker = e.target;
-            const data = marker._popupData;
-            if (data) await updateMarkerPosition(marker, data, newLatLng);
-          });
+            if (!isEditMode) return;
+            
+            // ✅ เปิดใช้งานการลาก
+            if (marker.dragging && marker.dragging.enable) {
+                marker.dragging.enable();
+            }
+            
+            // ผูกเหตุการณ์เมื่อลากเสร็จ
+            marker.off('dragend');
+            marker.on('dragend', async function(e) {
+                const newLatLng = e.target.getLatLng();
+                const marker = e.target;
+                const data = marker._popupData;
+                
+                if (data) {
+                    await updateMarkerPosition(marker, data, newLatLng);
+                }
+            });
         }
+
         // ฟังก์ชันสร้างแถวข้อมูลป้าย
         function renderSignTable() {
             const tbody = document.getElementById('sign-table-body');
@@ -2107,7 +2083,7 @@
                         if (layer._popupData.queued || layer._popupData.tempMarker) {
                             pendingMarkers.push({
                                 latlng: layer.getLatLng(),
-                                data: layer._popupData,
+                                data: layer._popupData,  // ✅ แก้ไขตรงนี้ - เพิ่มชื่อคีย์ 'data'
                                 type: layer._popupData.type
                             });
                         }
@@ -2144,7 +2120,7 @@
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
                         setupMarkerPopup(m, r, 'building');
                         m.addTo(surveyLayers);
-                        if (isEditMode) enableMarkerDragging(m, r);
+                        if (isEditMode) enableMarkerDragging(m, r); // ✅ เปิดใช้งานการลาก
                     });
                     
                     allSigns.forEach(r => {
@@ -2154,7 +2130,7 @@
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
                         setupMarkerPopup(m, r, 'sign');
                         m.addTo(surveyLayers);
-                        if (isEditMode) enableMarkerDragging(m, r);
+                        if (isEditMode) enableMarkerDragging(m, r); // ✅ เปิดใช้งานการลาก
                     });
                 }
                 
@@ -2164,23 +2140,8 @@
                     m._popupData = marker.data;
                     setupMarkerPopup(m, marker.data, marker.type);
                     m.addTo(surveyLayers);
-                    if (isEditMode) enableMarkerDragging(m, marker.data);
+                    if (isEditMode) enableMarkerDragging(m, marker.data); // ✅ เปิดใช้งานการลาก
                 });
-                
-                // ✅ ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว (หลังจากมาร์กเกอร์จริงแสดงแล้ว)
-                setTimeout(() => {
-                    surveyLayers.eachLayer(layer => {
-                        if (layer._popupData && layer._popupData.tempMarker && !layer._popupData.queued && !layer._popupData.failed) {
-                            // ตรวจสอบว่ามีมาร์กเกอร์จริงที่มีไอดีเดียวกันหรือไม่
-                            const hasRealMarker = allBuildings.some(b => b.id === layer._popupData.id) ||
-                                                 allSigns.some(s => s.id === layer._popupData.id);
-                            if (hasRealMarker) {
-                                surveyLayers.removeLayer(layer);
-                                console.log(`ลบมาร์กเกอร์ชั่วคราวที่ซิงค์สำเร็จแล้ว: ${layer._popupData.id}`);
-                            }
-                        }
-                    });
-                }, 300); // รอ 300ms เพื่อให้มาร์กเกอร์จริงแสดงก่อน (เพิ่มจาก 100ms เพื่อรองรับเน็ตช้า)
                 
             } catch(e) {
                 console.error("Error loading data:", e);
@@ -2944,24 +2905,21 @@
         }
 
         // เมื่อสร้างมาร์กเกอร์ใหม่
-        function createCircleMarker(latlng, type, draggable = false) {
-            const color = type === 'building' ? '#FF6B6B' : '#4ECDC4';
-            const marker = L.circleMarker(latlng, {
-                radius: 6,
-                fillColor: color,
-                color: '#fff',
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 1.0,
-                className: 'survey-marker'
+        function createCircleMarker(latlng, type, isDraggable = false) {
+            const className = type === 'building' ? 'circle-building' : 'circle-sign';
+            const icon = L.divIcon({
+                className: `circle-marker ${className}`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+            const marker = L.marker(latlng, {
+                icon: icon,
+                draggable: isDraggable, // ✅ ตั้งค่าให้ลากได้
+                zIndexOffset: 1000
             });
             
-            // เพิ่มลงในคลัสเตอร์แทนแผนที่
-            if (markerCluster) {
-                markerCluster.addLayer(marker);
-            } else {
-                marker.addTo(surveyLayers);
-            }
+            // เก็บข้อมูลไว้ในมาร์กเกอร์
+            marker._popupData = null;
             
             return marker;
         }

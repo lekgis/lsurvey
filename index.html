@@ -717,6 +717,14 @@
             console.log(`แคชตำแหน่ง: ${cacheKey}`);
         }
 
+        function showSyncToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-2 rounded-full shadow-lg z-[9999] flex items-center gap-2 animate-bounce";
+            toast.innerHTML = `<span>${msg}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
         // โหลดแผนที่จากแคชเมื่อเปิดแอป
         function loadCachedMapViews() {
             // โหลดจาก localStorage

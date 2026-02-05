@@ -3198,9 +3198,8 @@
         // ============================================
         let lastDataHash = ""; 
 
-async function smartLoadData() {
+        async function smartLoadData() {
             if (isUpdating || isEditMode) return;
-            
             try {
                 isUpdating = true;
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData&_t=${Date.now()}`);
@@ -3209,31 +3208,23 @@ async function smartLoadData() {
                 const currentHash = JSON.stringify(data.buildings) + JSON.stringify(data.signs);
                 
                 if (lastDataHash !== "" && lastDataHash !== currentHash) {
-                    // --- ส่วนคำนวณความต่างเพื่อแจ้งเตือนตามที่คุณต้องการ ---
+                    // คำนวณความต่างเพื่อแจ้งเตือน
                     const oldTotal = allBuildings.length + allSigns.length;
                     const newTotal = (data.buildings?.length || 0) + (data.signs?.length || 0);
                     
-                    let message = "🔄 มีการอัปเดตข้อมูล";
-                    if (newTotal > oldTotal) {
-                        message = `➕ เพิ่มจุดใหม่ ${newTotal - oldTotal} จุด`;
-                    } else if (newTotal < oldTotal) {
-                        message = `🗑️ ลบข้อมูล ${oldTotal - newTotal} จุด`;
-                    } else {
-                        message = `📍 มีการย้ายตำแหน่งหรือแก้ไขข้อมูล`;
-                    }
+                    let msg = "";
+                    if (newTotal > oldTotal) msg = `➕ เพิ่มข้อมูลใหม่ ${newTotal - oldTotal} จุด`;
+                    else if (newTotal < oldTotal) msg = `🗑️ ลบข้อมูลแล้ว ${oldTotal - newTotal} จุด`;
+                    else msg = `📍 มีการย้ายตำแหน่งหรือแก้ไขข้อมูล`;
 
-                    showSyncToast(message); // เรียกฟังก์ชันแจ้งเตือน
+                    showSyncToast(msg); // ฟังก์ชันแสดงแถบแจ้งเตือน
                     
                     allBuildings = data.buildings || [];
                     allSigns = data.signs || [];
-                    loadVisibleMarkers(); // วาดใหม่บนแผนที่
+                    loadVisibleMarkers(); // สั่งวาดจุดใหม่ทันที
                 }
                 lastDataHash = currentHash;
-            } catch (e) {
-                console.error("Sync Error:", e);
-            } finally {
-                isUpdating = false;
-            }
+            } catch (e) { console.error(e); } finally { isUpdating = false; }
         }
 
         function showUpdateToast(msg) {

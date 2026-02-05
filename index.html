@@ -589,10 +589,11 @@
         let isEditMode = false;
         let surveyLayers = L.layerGroup();
         let editingMarker = null;
-        
+        let markersBeingMoved = new Set(); // ✅ เพิ่มบรรทัดนี้ - เก็บ rowKey ของจุดที่กำลังถูกย้าย
         // ตัวแปรสำหรับเก็บข้อมูลและ Cache
         let allBuildings = []; 
-        let allSigns = [];     
+        let allSigns = [];   
+        let movingMarkerId = null; // ✅ เก็บ ID ของจุดที่กำลังถูกลากอยู่  
         
         // ตัวแปรสำหรับระบบอัปเดตอัตโนมัติ
 
@@ -973,7 +974,6 @@
         }
 
         // แก้ไขฟังก์ชัน updateMarkerPosition
-        // แก้ไขฟังก์ชันนี้ให้แสดงจุดชั่วคราวจนกว่าจะโหลดเสร็จ
         async function updateMarkerPosition(marker, data, newLatLng) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
@@ -993,19 +993,31 @@
                 return;
             }
             
-            // ✅ ขั้นตอนที่ 1: แสดงจุดชั่วคราว (ไม่ลบจุดเดิม)
+            // ✅ เพิ่มลงในรายการจุดที่กำลังถูกย้าย
+            markersBeingMoved.add(rowKey);
+            
+            // แสดงจุดชั่วคราว
             const tempMarker = createCircleMarker(newLatLng, type);
-            tempMarker._popupData = { ...data, lat_long: newLatLngStr, tempMarker: true };
+            tempMarker._popupData = {
+                ...data,
+                lat_long: newLatLngStr,
+                tempMarker: true,
+                tempMarkerId: `temp_${rowKey}`
+            };
             setupMarkerPopup(tempMarker, tempMarker._popupData, type);
             tempMarker.addTo(surveyLayers);
             
-            // ซ่อนจุดเดิมชั่วคราว
-            if (marker) {
-                surveyLayers.removeLayer(marker);
-            }
+            // ✅ ซ่อนจุดจริงทั้งหมดที่มี _row_num เดียวกัน
+            surveyLayers.eachLayer(layer => {
+                if (layer._popupData) {
+                    const layerId = layer._popupData._row_num || layer._popupData.id;
+                    if (layerId === rowKey && !layer._popupData.tempMarker) {
+                        surveyLayers.removeLayer(layer);
+                    }
+                }
+            });
             
-            // ✅ ขั้นตอนที่ 2: ส่งข้อมูลไปเซิร์ฟเวอร์
-            // ตรวจสอบสถานะออนไลน์/ออฟไลน์
+            // ตรวจสอบสถานะออนไลน์
             if (!isOnline || !navigator.onLine) {
                 const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
                 data.lat_long = newLatLngStr;
@@ -1013,6 +1025,10 @@
                 setupMarkerPopup(tempMarker, data, type);
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
+                
+                // ลบออกจากรายการ (เพราะยังไม่ได้อัปเดตจริง)
+                markersBeingMoved.delete(rowKey);
+                
                 console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
                 return;
             }
@@ -1025,18 +1041,20 @@
             
             try {
                 const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
-                
                 if (res.ok) {
-                    // ✅ ขั้นตอนที่ 3: โหลดข้อมูลใหม่ (จุดชั่วคราวยังแสดงอยู่)
+                    // ✅ โหลดข้อมูลใหม่ (จุดจริงจะถูกสร้างทันที พร้อมจุดชั่วคราว)
                     await loadExistingData();
                     
-                    // ✅ ขั้นตอนที่ 4: ลบจุดชั่วคราวหลังจากโหลดเสร็จ
+                    // ✅ ลบจุดชั่วคราวหลังจากจุดจริงปรากฏแล้ว (รอ 300ms)
                     setTimeout(() => {
                         surveyLayers.eachLayer(layer => {
-                            if (layer._popupData && layer._popupData.tempMarker) {
+                            if (layer._popupData && layer._popupData.tempMarkerId === `temp_${rowKey}`) {
                                 surveyLayers.removeLayer(layer);
                             }
                         });
+                        
+                        // ✅ ลบออกจากรายการหลังจากลบจุดชั่วคราวแล้ว
+                        markersBeingMoved.delete(rowKey);
                         
                         refreshIcon.classList.remove('animate-spin');
                         refreshBtn.classList.add('refresh-success');
@@ -1047,7 +1065,7 @@
                         
                         console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
                         showNotificationLeft('อัปเดตตำแหน่งสำเร็จ!', 'success');
-                    }, 300); // รอให้แสดงจุดจริงก่อน
+                    }, 300); // รอให้จุดจริงปรากฏก่อน
                     
                 } else {
                     throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
@@ -1062,6 +1080,10 @@
                 
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
+                
+                // ลบออกจากรายการ (เพราะล้มเหลว)
+                markersBeingMoved.delete(rowKey);
+                
                 console.error("Error updating position:", err);
                 
                 // หากเกิดข้อผิดพลาด ให้เก็บข้อมูลไว้ในคิวแทน
@@ -2032,36 +2054,71 @@
          * อัปเดตมาร์กเกอร์เฉพาะในมุมมองปัจจุบัน (สำหรับข้อมูลจำนวนมาก)
          */
         function updateVisibleMarkers() {
-          surveyLayers.clearLayers();
-          const bounds = map.getBounds();
-          
-          // แสดงเฉพาะสิ่งปลูกสร้างในมุมมอง
-          allBuildings.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const latLng = L.latLng(coords[0], coords[1]);
-            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
+            // เก็บจุดชั่วคราวทั้งหมดก่อนล้าง
+            const pendingMarkers = [];
+            surveyLayers.eachLayer(layer => {
+                if (layer._popupData) {
+                    if (layer._popupData.queued || layer._popupData.tempMarker) {
+                        pendingMarkers.push({
+                            latlng: layer.getLatLng(),
+                            data: layer._popupData,
+                            type: layer._popupData.type
+                        });
+                    }
+                }
+            });
             
-            const m = createCircleMarker(latLng, 'building', isEditMode);
-            setupMarkerPopup(m, r, 'building');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
-          
-          // แสดงเฉพาะป้ายในมุมมอง
-          allSigns.forEach(r => {
-            if (!r.lat_long) return;
-            const coords = r.lat_long.split(',').map(Number);
-            if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const latLng = L.latLng(coords[0], coords[1]);
-            if (!bounds.contains(latLng)) return; // ข้ามถ้าอยู่นอกมุมมอง
+            surveyLayers.clearLayers();
+            const bounds = map.getBounds();
             
-            const m = createCircleMarker(latLng, 'sign', isEditMode);
-            setupMarkerPopup(m, r, 'sign');
-            m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
-          });
+            // แสดงเฉพาะสิ่งปลูกสร้างในมุมมอง
+            allBuildings.forEach(r => {
+                if (!r.lat_long) return;
+                const coords = r.lat_long.split(',').map(Number);
+                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                const latLng = L.latLng(coords[0], coords[1]);
+                if (!bounds.contains(latLng)) return;
+                
+                // ✅ แก้ตรงนี้: ใช้ทั้ง _row_num และ id
+                const recordKey = r._row_num || r.id;
+                if (markersBeingMoved.has(recordKey)) {
+                    return; // ข้ามการสร้างจุดจริง
+                }
+                
+                const m = createCircleMarker(latLng, 'building', isEditMode);
+                setupMarkerPopup(m, r, 'building');
+                m.addTo(surveyLayers);
+                if (isEditMode) enableMarkerDragging(m, r);
+            });
+            
+            // แสดงเฉพาะป้ายในมุมมอง
+            allSigns.forEach(r => {
+                if (!r.lat_long) return;
+                const coords = r.lat_long.split(',').map(Number);
+                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                const latLng = L.latLng(coords[0], coords[1]);
+                if (!bounds.contains(latLng)) return;
+                
+                // ✅ ตรวจสอบว่าจุดนี้กำลังถูกย้ายหรือไม่
+                const recordKey = r._row_num || r.id; // ✅ เพิ่มบรรทัดนี้
+                if (markersBeingMoved.has(recordKey)) { // ✅ แก้เป็น recordKey
+                    return;
+                }
+                
+                const m = createCircleMarker(latLng, 'sign', isEditMode);
+                setupMarkerPopup(m, r, 'sign');
+                m.addTo(surveyLayers);
+                if (isEditMode) enableMarkerDragging(m, r);
+            });
+            
+            // เพิ่มจุดชั่วคราวกลับเข้ามา
+            pendingMarkers.forEach(marker => {
+                const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
+                m._popupData = marker.data;
+                setupMarkerPopup(m, marker.data, marker.type);
+                m.addTo(surveyLayers);
+                if (isEditMode) enableMarkerDragging(m, marker.data);
+            });
         }
 
         // เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
@@ -2126,7 +2183,7 @@
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
                 const data = await res.json();
                 
-                // ✅ ขั้นตอนที่ 1: เก็บจุดชั่วคราวทั้งหมด (ทั้งที่กำลังรอซิงค์และที่เพิ่งสร้าง)
+                // เก็บจุดชั่วคราวทั้งหมดก่อนล้าง
                 const tempMarkers = [];
                 surveyLayers.eachLayer(layer => {
                     if (layer._popupData && layer._popupData.tempMarker) {
@@ -2138,10 +2195,9 @@
                     }
                 });
                 
-                // ล้างมาร์กเกอร์ทั้งหมด
                 surveyLayers.clearLayers();
                 
-                // ✅ ขั้นตอนที่ 2: โหลดข้อมูลจริงจากเซิร์ฟเวอร์
+                // โหลดข้อมูลจริงจากเซิร์ฟเวอร์
                 allBuildings = data.buildings || [];
                 allSigns = data.signs || [];
                 
@@ -2149,7 +2205,6 @@
                 renderBuildingTable();
                 renderSignTable();
                 
-                // สร้างมาร์กเกอร์จากข้อมูลเซิร์ฟเวอร์
                 const totalMarkers = allBuildings.length + allSigns.length;
                 const useOptimizedRendering = totalMarkers > 200;
                 
@@ -2158,12 +2213,15 @@
                     map.off('zoomend', updateVisibleMarkers);
                     map.on('moveend', updateVisibleMarkers);
                     map.on('zoomend', updateVisibleMarkers);
-                    updateVisibleMarkers();
+                    updateVisibleMarkers(); // ✅ ฟังก์ชันนี้ยังมีการตรวจสอบ markersBeingMoved (สำหรับการเลื่อนแผนที่ระหว่างย้าย)
                 } else {
+                    // ✅ สร้างจุดจริงทั้งหมดโดยไม่ตรวจสอบ markersBeingMoved
                     allBuildings.forEach(r => {
                         if (!r.lat_long) return;
                         const coords = r.lat_long.split(',').map(Number);
                         if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                        // ❌ ลบบรรทัดนี้ออกทั้งหมด:
+                        // if (markersBeingMoved.has(r._row_num)) return;
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
                         setupMarkerPopup(m, r, 'building');
                         m.addTo(surveyLayers);
@@ -2174,6 +2232,8 @@
                         if (!r.lat_long) return;
                         const coords = r.lat_long.split(',').map(Number);
                         if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                        // ❌ ลบบรรทัดนี้ออกทั้งหมด:
+                        // if (markersBeingMoved.has(r._row_num)) return;
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
                         setupMarkerPopup(m, r, 'sign');
                         m.addTo(surveyLayers);
@@ -2181,7 +2241,7 @@
                     });
                 }
                 
-                // ✅ ขั้นตอนที่ 3: เพิ่มจุดชั่วคราวกลับเข้ามา (แสดงทับข้อมูลจริง)
+                // ✅ เพิ่มจุดชั่วคราวกลับเข้ามา (จะมีทั้งจุดจริงและจุดชั่วคราวชั่วคราว 300ms)
                 tempMarkers.forEach(marker => {
                     const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
                     m._popupData = marker.data;
@@ -2189,7 +2249,6 @@
                     m.addTo(surveyLayers);
                     if (isEditMode) enableMarkerDragging(m, marker.data);
                 });
-                
             } catch(e) {
                 console.error("Error loading data:", e);
             }
@@ -3197,11 +3256,36 @@
 
         // ฟังก์ชันโหลดมาร์กเกอร์เฉพาะที่มองเห็น + buffer
         function loadVisibleMarkers() {
-            const bounds = map.getBounds();
-            const visibleMarkers = [];
+            // เก็บจุดชั่วคราวทั้งหมดก่อนล้าง
+            const pendingMarkers = [];
+            if (markerCluster) {
+                markerCluster.eachLayer(layer => {
+                    if (layer._popupData) {
+                        if (layer._popupData.queued || layer._popupData.tempMarker) {
+                            pendingMarkers.push({
+                                latlng: layer.getLatLng(),
+                                data: layer._popupData,
+                                type: layer._popupData.type
+                            });
+                        }
+                    }
+                });
+            } else {
+                surveyLayers.eachLayer(layer => {
+                    if (layer._popupData) {
+                        if (layer._popupData.queued || layer._popupData.tempMarker) {
+                            pendingMarkers.push({
+                                latlng: layer.getLatLng(),
+                                data: layer._popupData,
+                                type: layer._popupData.type
+                            });
+                        }
+                    }
+                });
+            }
             
-            // ✅ เพิ่ม Buffer Zone รอบขอบเขตที่มองเห็น
-            const bufferRatio = isMobile() ? 0.5 : 1.0; // มือถือ 50%, คอม 100%
+            const bounds = map.getBounds();
+            const bufferRatio = isMobile() ? 0.5 : 1.0;
             const bufferedBounds = bounds.pad(bufferRatio);
             
             // ล้างมาร์กเกอร์ทั้งหมด
@@ -3217,14 +3301,17 @@
                 const coords = r.lat_long.split(',').map(Number);
                 if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
                 const latLng = L.latLng(coords[0], coords[1]);
-                
-                // ✅ ตรวจสอบว่าอยู่ในขอบเขต + buffer
                 if (!bufferedBounds.contains(latLng)) return;
+                
+                // ✅ ตรวจสอบว่าจุดนี้กำลังถูกย้ายหรือไม่
+                const recordKey = r._row_num || r.id;
+                if (markersBeingMoved.has(recordKey)) {
+                    return; // ข้ามการสร้างจุดจริง
+                }
                 
                 const m = createCircleMarker(latLng, 'building', isEditMode);
                 setupMarkerPopup(m, r, 'building');
                 if (isEditMode) enableMarkerDragging(m, r);
-                
                 if (markerCluster) {
                     markerCluster.addLayer(m);
                 } else {
@@ -3237,19 +3324,35 @@
                 const coords = r.lat_long.split(',').map(Number);
                 if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
                 const latLng = L.latLng(coords[0], coords[1]);
-                
-                // ✅ ตรวจสอบว่าอยู่ในขอบเขต + buffer
                 if (!bufferedBounds.contains(latLng)) return;
+                
+                // ✅ ตรวจสอบว่าจุดนี้กำลังถูกย้ายหรือไม่
+                const recordKey = r._row_num || r.id; // ✅ เพิ่มบรรทัดนี้
+                if (markersBeingMoved.has(recordKey)) { // ✅ แก้เป็น recordKey
+                    return;
+                }
                 
                 const m = createCircleMarker(latLng, 'sign', isEditMode);
                 setupMarkerPopup(m, r, 'sign');
                 if (isEditMode) enableMarkerDragging(m, r);
-                
                 if (markerCluster) {
                     markerCluster.addLayer(m);
                 } else {
                     m.addTo(surveyLayers);
                 }
+            });
+            
+            // เพิ่มจุดชั่วคราวกลับเข้ามา
+            pendingMarkers.forEach(marker => {
+                const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
+                m._popupData = marker.data;
+                setupMarkerPopup(m, marker.data, marker.type);
+                if (markerCluster) {
+                    markerCluster.addLayer(m);
+                } else {
+                    m.addTo(surveyLayers);
+                }
+                if (isEditMode) enableMarkerDragging(m, marker.data);
             });
         }
 

@@ -848,9 +848,11 @@
         }
 
         // แก้ไขฟังก์ชัน backgroundUpload
+        // แก้ไขฟังก์ชันนี้
         async function backgroundUpload(latlng, type, marker) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
+            
             disableRefreshButton();
             refreshIcon.classList.add('animate-spin');
             
@@ -883,23 +885,30 @@
                 const result = await sendDataWithRetry('quickAdd', type, data);
                 
                 if (result.success) {
-                    refreshIcon.classList.remove('animate-spin');
-                    refreshBtn.classList.add('refresh-success');
-                    setTimeout(() => {
-                        refreshBtn.classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
-                    
-                    // ✅ ลำดับที่ถูกต้อง (ตามที่คุณระบุ):
-                    // 1. โหลดข้อมูลใหม่ก่อน (เพื่อให้มีข้อมูลจริงแสดงบนแผนที่)
+                    // ✅ ขั้นตอนที่ 1-3: จุดชั่วคราวยังแสดงอยู่
+                    // โหลดข้อมูลใหม่ก่อน (เพื่อให้มีข้อมูลจริงแสดงบนแผนที่)
                     await loadExistingData();
                     
-                    // 2. ลบมาร์กเกอร์ชั่วคราวหลังจากข้อมูลจริงแสดงแล้ว
-                    // (ทำในฟังก์ชัน loadExistingData ด้านล่าง ผ่าน setTimeout)
+                    // ✅ ขั้นตอนที่ 4: ลบจุดชั่วคราวหลังจากโหลดเสร็จ
+                    setTimeout(() => {
+                        surveyLayers.eachLayer(layer => {
+                            if (layer._popupData && layer._popupData.tempMarker) {
+                                surveyLayers.removeLayer(layer);
+                            }
+                        });
+                        
+                        refreshIcon.classList.remove('animate-spin');
+                        refreshBtn.classList.add('refresh-success');
+                        setTimeout(() => {
+                            refreshBtn.classList.remove('refresh-success');
+                            enableRefreshButton();
+                        }, 2000);
+                        
+                        showNotificationLeft('เพิ่มจุดสำเร็จ!', 'success');
+                    }, 300); // รอให้แสดงจุดจริงก่อน
                     
-                    showNotificationLeft('เพิ่มจุดสำเร็จ!', 'success');
                 } else if (result.queued) {
-                    // ถ้าอยู่ในคิว
+                    // ถ้าอยู่ในคิว - ไม่ลบจุดชั่วคราว
                     refreshIcon.classList.remove('animate-spin');
                     enableRefreshButton();
                     marker._popupData = {
@@ -964,6 +973,7 @@
         }
 
         // แก้ไขฟังก์ชัน updateMarkerPosition
+        // แก้ไขฟังก์ชันนี้ให้แสดงจุดชั่วคราวจนกว่าจะโหลดเสร็จ
         async function updateMarkerPosition(marker, data, newLatLng) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
@@ -983,19 +993,30 @@
                 return;
             }
             
+            // ✅ ขั้นตอนที่ 1: แสดงจุดชั่วคราว (ไม่ลบจุดเดิม)
+            const tempMarker = createCircleMarker(newLatLng, type);
+            tempMarker._popupData = { ...data, lat_long: newLatLngStr, tempMarker: true };
+            setupMarkerPopup(tempMarker, tempMarker._popupData, type);
+            tempMarker.addTo(surveyLayers);
+            
+            // ซ่อนจุดเดิมชั่วคราว
+            if (marker) {
+                surveyLayers.removeLayer(marker);
+            }
+            
+            // ✅ ขั้นตอนที่ 2: ส่งข้อมูลไปเซิร์ฟเวอร์
             // ตรวจสอบสถานะออนไลน์/ออฟไลน์
             if (!isOnline || !navigator.onLine) {
                 const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
                 data.lat_long = newLatLngStr;
-                marker._popupData.lat_long = newLatLngStr;
-                setupMarkerPopup(marker, data, type);
+                if (marker) marker._popupData.lat_long = newLatLngStr;
+                setupMarkerPopup(tempMarker, data, type);
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
                 console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
                 return;
             }
             
-            // ถ้าออนไลน์ → ส่งข้อมูลทันที
             const body = new URLSearchParams();
             body.append('action', 'updatePosition');
             body.append('type', type);
@@ -1006,23 +1027,39 @@
                 const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
                 
                 if (res.ok) {
-                    data.lat_long = newLatLngStr;
-                    marker._popupData.lat_long = newLatLngStr;
-                    setupMarkerPopup(marker, data, type);
+                    // ✅ ขั้นตอนที่ 3: โหลดข้อมูลใหม่ (จุดชั่วคราวยังแสดงอยู่)
                     await loadExistingData();
                     
-                    refreshIcon.classList.remove('animate-spin');
-                    refreshBtn.classList.add('refresh-success');
+                    // ✅ ขั้นตอนที่ 4: ลบจุดชั่วคราวหลังจากโหลดเสร็จ
                     setTimeout(() => {
-                        refreshBtn.classList.remove('refresh-success');
-                        enableRefreshButton();
-                    }, 2000);
+                        surveyLayers.eachLayer(layer => {
+                            if (layer._popupData && layer._popupData.tempMarker) {
+                                surveyLayers.removeLayer(layer);
+                            }
+                        });
+                        
+                        refreshIcon.classList.remove('animate-spin');
+                        refreshBtn.classList.add('refresh-success');
+                        setTimeout(() => {
+                            refreshBtn.classList.remove('refresh-success');
+                            enableRefreshButton();
+                        }, 2000);
+                        
+                        console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
+                        showNotificationLeft('อัปเดตตำแหน่งสำเร็จ!', 'success');
+                    }, 300); // รอให้แสดงจุดจริงก่อน
                     
-                    console.log(`ตำแหน่งอัปเดตจาก ${oldLatLng} เป็น ${newLatLngStr}`);
                 } else {
                     throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
                 }
             } catch (err) {
+                // หากเกิดข้อผิดพลาด ให้คืนค่าจุดเดิม
+                surveyLayers.removeLayer(tempMarker);
+                if (marker) {
+                    marker.setLatLng(L.latLng(oldLatLng.split(',').map(Number)));
+                    marker.addTo(surveyLayers);
+                }
+                
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
                 console.error("Error updating position:", err);
@@ -1030,7 +1067,7 @@
                 // หากเกิดข้อผิดพลาด ให้เก็บข้อมูลไว้ในคิวแทน
                 const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
                 data.lat_long = newLatLngStr;
-                marker._popupData.lat_long = newLatLngStr;
+                if (marker) marker._popupData.lat_long = newLatLngStr;
                 setupMarkerPopup(marker, data, type);
                 console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
             }
@@ -2089,24 +2126,22 @@
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
                 const data = await res.json();
                 
-                // เก็บมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวทั้งหมด
-                const pendingMarkers = [];
+                // ✅ ขั้นตอนที่ 1: เก็บจุดชั่วคราวทั้งหมด (ทั้งที่กำลังรอซิงค์และที่เพิ่งสร้าง)
+                const tempMarkers = [];
                 surveyLayers.eachLayer(layer => {
-                    if (layer._popupData) {
-                        if (layer._popupData.queued || layer._popupData.tempMarker) {
-                            pendingMarkers.push({
-                                latlng: layer.getLatLng(),
-                                data: layer._popupData,  // ✅ แก้ไขตรงนี้ - เพิ่มชื่อคีย์ 'data'
-                                type: layer._popupData.type
-                            });
-                        }
+                    if (layer._popupData && layer._popupData.tempMarker) {
+                        tempMarkers.push({
+                            latlng: layer.getLatLng(),
+                            data: layer._popupData,
+                            type: layer._popupData.type
+                        });
                     }
                 });
                 
                 // ล้างมาร์กเกอร์ทั้งหมด
                 surveyLayers.clearLayers();
                 
-                // เก็บข้อมูลไว้สำหรับตาราง
+                // ✅ ขั้นตอนที่ 2: โหลดข้อมูลจริงจากเซิร์ฟเวอร์
                 allBuildings = data.buildings || [];
                 allSigns = data.signs || [];
                 
@@ -2125,7 +2160,6 @@
                     map.on('zoomend', updateVisibleMarkers);
                     updateVisibleMarkers();
                 } else {
-                    // สร้างมาร์กเกอร์จากข้อมูลเซิร์ฟเวอร์
                     allBuildings.forEach(r => {
                         if (!r.lat_long) return;
                         const coords = r.lat_long.split(',').map(Number);
@@ -2147,10 +2181,10 @@
                     });
                 }
                 
-                // เพิ่มมาร์กเกอร์ที่กำลังรอซิงค์และมาร์กเกอร์ชั่วคราวกลับเข้ามา
-                pendingMarkers.forEach(marker => {
+                // ✅ ขั้นตอนที่ 3: เพิ่มจุดชั่วคราวกลับเข้ามา (แสดงทับข้อมูลจริง)
+                tempMarkers.forEach(marker => {
                     const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
-                    m._popupData = marker.data; // ✅ ใช้ marker.data ซึ่งถูกกำหนดไว้แล้ว
+                    m._popupData = marker.data;
                     setupMarkerPopup(m, marker.data, marker.type);
                     m.addTo(surveyLayers);
                     if (isEditMode) enableMarkerDragging(m, marker.data);

@@ -3140,7 +3140,9 @@
             markerCluster.addTo(map);
         }
 
-        // เมื่อสร้างมาร์กเกอร์ใหม่
+// ============================================
+        // 1. ส่วนสร้างมาร์กเกอร์และจัดการแผนที่
+        // ============================================
         function createCircleMarker(latlng, type, isDraggable = false) {
             const className = type === 'building' ? 'circle-building' : 'circle-sign';
             const icon = L.divIcon({
@@ -3148,98 +3150,131 @@
                 iconSize: [14, 14],
                 iconAnchor: [7, 7]
             });
-            const marker = L.marker(latlng, {
+            return L.marker(latlng, {
                 icon: icon,
-                draggable: isDraggable, // ✅ ตั้งค่าให้ลากได้
+                draggable: isDraggable,
                 zIndexOffset: 1000
             });
-            
-            // เก็บข้อมูลไว้ในมาร์กเกอร์
-            marker._popupData = null;
-            
-            return marker;
         }
 
-        // ฟังก์ชันโหลดมาร์กเกอร์เฉพาะที่มองเห็น + buffer
         function loadVisibleMarkers() {
+            if (!map) return;
             const bounds = map.getBounds();
-            const visibleMarkers = [];
+            const bufferedBounds = bounds.pad(isMobile() ? 0.5 : 1.0);
             
-            // ✅ เพิ่ม Buffer Zone รอบขอบเขตที่มองเห็น
-            const bufferRatio = isMobile() ? 0.5 : 1.0; // มือถือ 50%, คอม 100%
-            const bufferedBounds = bounds.pad(bufferRatio);
-            
-            // ล้างมาร์กเกอร์ทั้งหมด
-            if (markerCluster) {
+            if (typeof markerCluster !== 'undefined' && markerCluster) {
                 markerCluster.clearLayers();
             } else {
                 surveyLayers.clearLayers();
             }
             
-            // โหลดเฉพาะมาร์กเกอร์ที่อยู่ในขอบเขต + buffer
-            allBuildings.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const latLng = L.latLng(coords[0], coords[1]);
-                
-                // ✅ ตรวจสอบว่าอยู่ในขอบเขต + buffer
-                if (!bufferedBounds.contains(latLng)) return;
-                
-                const m = createCircleMarker(latLng, 'building', isEditMode);
-                setupMarkerPopup(m, r, 'building');
-                if (isEditMode) enableMarkerDragging(m, r);
-                
-                if (markerCluster) {
-                    markerCluster.addLayer(m);
-                } else {
-                    m.addTo(surveyLayers);
-                }
-            });
-            
-            allSigns.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const latLng = L.latLng(coords[0], coords[1]);
-                
-                // ✅ ตรวจสอบว่าอยู่ในขอบเขต + buffer
-                if (!bufferedBounds.contains(latLng)) return;
-                
-                const m = createCircleMarker(latLng, 'sign', isEditMode);
-                setupMarkerPopup(m, r, 'sign');
-                if (isEditMode) enableMarkerDragging(m, r);
-                
-                if (markerCluster) {
-                    markerCluster.addLayer(m);
-                } else {
-                    m.addTo(surveyLayers);
-                }
-            });
+            const processData = (data, type) => {
+                data.forEach(r => {
+                    if (!r.lat_long) return;
+                    const coords = r.lat_long.split(',').map(Number);
+                    if (coords.length < 2 || isNaN(coords[0])) return;
+                    const latLng = L.latLng(coords[0], coords[1]);
+                    
+                    if (bufferedBounds.contains(latLng)) {
+                        const m = createCircleMarker(latLng, type, isEditMode);
+                        setupMarkerPopup(m, r, type);
+                        if (isEditMode) enableMarkerDragging(m, r);
+                        
+                        if (typeof markerCluster !== 'undefined' && markerCluster) {
+                            markerCluster.addLayer(m);
+                        } else {
+                            m.addTo(surveyLayers);
+                        }
+                    }
+                });
+            };
+
+            processData(allBuildings, 'building');
+            processData(allSigns, 'sign');
         }
 
-        // เรียกใช้เมื่อเลื่อนหรือซูมแผนที่
-        map.on('moveend', loadVisibleMarkers);
-        map.on('zoomend', loadVisibleMarkers);
+        // ============================================
+        // 2. ระบบ Real-time อัจฉริยะ (แจ้งเตือน เพิ่ม/ลด/ย้าย)
+        // ============================================
+        let lastDataHash = ""; 
+
+        async function smartLoadData() {
+            if (isUpdating || isEditMode) return;
+            try {
+                isUpdating = true;
+                const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData&_t=${Date.now()}`);
+                const data = await res.json();
+                
+                // ตรวจสอบการเปลี่ยนแปลงด้วยข้อมูล String
+                const currentHash = JSON.stringify(data.buildings) + JSON.stringify(data.signs);
+                
+                if (lastDataHash !== "" && lastDataHash !== currentHash) {
+                    // หาว่าอะไรเปลี่ยน (ตัวอย่างแจ้งเตือนแบบรวม)
+                    showUpdateToast("🔄 มีการอัปเดตข้อมูลจากเครื่องอื่น");
+                    
+                    allBuildings = data.buildings || [];
+                    allSigns = data.signs || [];
+                    loadVisibleMarkers(); // วาดใหม่ทันที
+                }
+                lastDataHash = currentHash;
+            } catch (e) {
+                console.error("Real-time Sync Error:", e);
+            } finally {
+                isUpdating = false;
+            }
+        }
+
+        function showUpdateToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-2 rounded-full shadow-lg z-[9999] animate-bounce";
+            toast.innerHTML = `<div class="flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4 animate-spin"></i> ${msg}</div>`;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
+        }
+
+        function startRealtimeAutoUpdate() {
+            setInterval(smartLoadData, 5000);
+        }
+
+        function stopRealtimeAutoUpdate() {
+            console.log("Stopped Sync");
+        }
 
         // ============================================
-        // 1. แก้ไขฟังก์ชัน refreshData (ใช้ระบบใหม่)
+        // 3. ควบคุมการเริ่มทำงาน
         // ============================================
         function refreshData() {
-            const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
+            if(refreshIcon) refreshIcon.classList.add('animate-spin');
             
-            disableRefreshButton();
-            refreshIcon.classList.add('animate-spin');
-            
-            // ✅ เปลี่ยนจาก smartLoadData() เป็น loadExistingData()
-            loadExistingData().finally(() => {
+            // ดึงข้อมูลใหม่และโหลดจุดใหม่
+            smartLoadData().finally(() => {
                 setTimeout(() => {
-                    refreshIcon.classList.remove('animate-spin');
-                    enableRefreshButton();
+                    if(refreshIcon) refreshIcon.classList.remove('animate-spin');
                 }, 500);
             });
         }
+
+        map.on('moveend', loadVisibleMarkers);
+        map.on('zoomend', loadVisibleMarkers);
+
+        window.addEventListener('beforeunload', stopRealtimeAutoUpdate);
+
+        window.addEventListener('load', async () => {
+            initMap();
+            lucide.createIcons();
+            
+            // โหลดข้อมูลครั้งแรก
+            await smartLoadData(); 
+            
+            startRealtimeAutoUpdate();
+            if (typeof checkAndSyncOnStartup === 'function') await checkAndSyncOnStartup();
+            
+            setInterval(() => {
+                if (typeof updateSyncBadge === 'function') updateSyncBadge();
+            }, 1000);
+        });
 
         // ============================================
         // 2. วาง beforeunload ที่ระดับบนสุด (นอก window.load)

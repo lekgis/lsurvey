@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -1067,6 +1068,134 @@
             } catch (err) {
                 console.error("Error saving data:", err);
                 showNotificationLeft('เกิดข้อผิดพลาดในการบันทึก!', 'error');
+            }
+        }
+
+        async function processDataSyncQueue() {
+            console.log('🔄 เริ่มกระบวนการซิงค์ข้อมูล...');
+            console.log('สถานะออนไลน์:', isOnline, 'navigator.onLine:', navigator.onLine);
+            console.log('จำนวนรายการในคิวข้อมูล:', dataSyncQueue.length);
+            
+            if (!isOnline || !navigator.onLine) {
+                console.log('❌ ออฟไลน์ - รอการเชื่อมต่อ...');
+                return;
+            }
+            
+            if (dataSyncQueue.length === 0) {
+                console.log('ℹ️ คิวข้อมูลว่าง - ไม่มีข้อมูลให้อัปโหลด');
+                return;
+            }
+            
+            console.log(`📦 เริ่มกระบวนการซิงค์ข้อมูล (${dataSyncQueue.length} รายการ)`);
+            console.log('CONFIG.SCRIPT_URL:', CONFIG.SCRIPT_URL);
+            
+            // ประมวลผลคิวทีละรายการ
+            for (let i = 0; i < dataSyncQueue.length; i++) {
+                const item = dataSyncQueue[i];
+                
+                if (item.status === 'success') {
+                    console.log(`⏭️ รายการ ${i + 1}: สำเร็จแล้ว (ข้าม)`);
+                    continue;
+                }
+                
+                try {
+                    console.log(`📤 กำลังประมวลผลรายการ ${i + 1}/${dataSyncQueue.length}: ${item.action}`);
+                    console.log('ข้อมูล:', JSON.stringify(item, null, 2));
+                    
+                    let result;
+                    
+                    // ✅ แก้ไข: เปลี่ยน 'add' เป็น 'quickAdd'
+                    switch (item.action) {
+                        case 'add':
+                        case 'quickAdd':
+                            result = await sendDataWithRetry('quickAdd', item.type, item.data);
+                            break;
+                        case 'update':
+                            result = await sendDataWithRetry('update', item.type, item.data, item.rowKey);
+                            break;
+                        case 'delete':
+                            result = await sendDataWithRetry('delete', item.type, {}, item.rowKey);
+                            break;
+                        case 'updatePosition':
+                            result = await sendDataWithRetry('updatePosition', item.type, item.data, item.rowKey);
+                            break;
+                        default:
+                            console.warn(`⚠️ ไม่รู้จัก action: ${item.action}`);
+                            continue;
+                    }
+                    
+                    console.log(`📊 ผลลัพธ์รายการ ${i + 1}:`, result);
+                    
+                    // ✅ ตรวจสอบว่าเซิร์ฟเวอร์ตอบกลับสำเร็จจริงๆ
+                    if (result && (result.success || (result.data && result.data.status === 200))) {
+                        console.log(`✅ รายการ ${i + 1} สำเร็จ`);
+                        
+                        // อัปเดตสถานะในคิว
+                        item.status = 'success';
+                        item.syncedAt = new Date().toISOString();
+                        
+                        // บันทึกคิวลงใน localStorage
+                        saveDataSyncQueueToStorage();
+                        
+                        // แสดงแจ้งเตือน
+                        showNotificationLeft(`อัปโหลดข้อมูลสำเร็จ (${i + 1}/${dataSyncQueue.length})`, 'success');
+                        
+                    } else {
+                        console.warn(`⚠️ รายการ ${i + 1} ล้มเหลว - รอลองใหม่`);
+                        console.log('ผลลัพธ์:', result);
+                        
+                        item.retryCount = (item.retryCount || 0) + 1;
+                        
+                        if (item.retryCount >= 3) {
+                            item.status = 'failed';
+                            console.error(`❌ รายการ ${i + 1} ล้มเหลวเกิน 3 ครั้ง`);
+                        }
+                        
+                        // บันทึกคิวลงใน localStorage
+                        saveDataSyncQueueToStorage();
+                        
+                        // หยุดกระบวนการชั่วคราว
+                        break;
+                    }
+                    
+                    // รอ 500ms ระหว่างการอัปโหลดแต่ละรายการ
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (err) {
+                    console.error(`❌ ข้อผิดพลาดในการประมวลผลรายการ ${i + 1}:`, err);
+                    console.error('Stack trace:', err.stack);
+                    
+                    item.retryCount = (item.retryCount || 0) + 1;
+                    
+                    if (item.retryCount >= 3) {
+                        item.status = 'failed';
+                    }
+                    
+                    // บันทึกคิวลงใน localStorage
+                    saveDataSyncQueueToStorage();
+                    
+                    // หยุดกระบวนการชั่วคราว
+                    break;
+                }
+            }
+            
+            // ลบรายการที่สำเร็จแล้วออกจากคิว
+            const successItems = dataSyncQueue.filter(item => item.status === 'success');
+            for (const item of successItems) {
+                removeFromDataSyncQueue(item.id);
+            }
+            
+            // โหลดคิวใหม่จาก localStorage
+            loadDataSyncQueueFromStorage();
+            
+            console.log(`✅ กระบวนการซิงค์ข้อมูลเสร็จสิ้น - คงเหลือ ${dataSyncQueue.length} รายการ`);
+            
+            // ถ้ายังมีรายการเหลืออยู่ ให้ลองซิงค์อีกครั้งหลังจาก 5 วินาที
+            if (dataSyncQueue.length > 0) {
+                console.log('⏳ มีรายการเหลืออยู่ - จะลองซิงค์อีกครั้งใน 5 วินาที');
+                setTimeout(() => {
+                    processDataSyncQueue();
+                }, 5000);
             }
         }
 

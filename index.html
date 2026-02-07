@@ -959,22 +959,24 @@
             // ดึงพิกัด
             data.lat_long = document.getElementById('latlng-display').innerText;
             
-            // ✅ ประกาศตัวแปรครั้งเดียวที่นี่
+            // ✅ ประกาศตัวแปร
             const markerType = editingMarker._popupData.type;
             const rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
+            const existingQueueId = editingMarker._popupData.queueId;
             
-            if (!rowKey) {
+            // ✅ ตรวจสอบ
+            if (!rowKey && !existingQueueId) {
                 alert("ไม่พบข้อมูลสำหรับอัปเดต");
                 return;
             }
             
-            // จัดการรูปภาพ (นำมาจากโค้ดที่สอง พร้อม fallback)
+            // จัดการรูปภาพ
             let imageFilename = null;
             const fileInput = form.querySelector('input[type="file"]');
             
             if (fileInput && fileInput.files[0]) {
                 const file = fileInput.files[0];
-                const maxSize = markerType === 'building' ? 1500 : 2000; // ขนาดตามประเภท
+                const maxSize = markerType === 'building' ? 1500 : 2000;
                 
                 // ฟังก์ชันปรับขนาดรูปภาพพร้อม fallback
                 const resizeImage = (file, maxWidth = maxSize, maxHeight = maxSize) => {
@@ -1020,7 +1022,7 @@
                     imageBase64 = `${file.type};base64,${base64Data}`;
                     imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
                     
-                    // ✅ บันทึกรูปภาพลง IndexedDB (สร้างคิวรูปภาพอัตโนมัติ)
+                    // ✅ บันทึกรูปภาพลง IndexedDB
                     await saveImageToDB(imageBase64, imageFilename, rowKey, markerType);
                     console.log(`✅ รูปภาพบันทึกใน IndexedDB: ${imageFilename}`);
                 } catch (err) {
@@ -1041,22 +1043,41 @@
                 }
             }
             
-            // เพิ่มข้อมูลรูปภาพลงในข้อมูลคิว (อ้างอิงชื่อไฟล์เท่านั้น)
+            // เพิ่มข้อมูลรูปภาพลงในข้อมูลคิว
             if (imageFilename) {
                 data.imageFilename = imageFilename;
                 data.hasImage = true;
             }
             
-            // ✅ บังคับให้ทุกอย่างเข้าคิวใน localStorage ไม่มียกเว้น (ไม่พยายามส่งทันที!)
-            const queueId = addToSyncQueue('update', markerType, data, rowKey);
+            // ✅ ตรวจสอบว่าเป็นจุดชั่วคราวหรือจุดจริง
+            let finalQueueId;
+            if (existingQueueId) {
+                // ✅ เป็นจุดชั่วคราว - อัปเดตรายการเดิมในคิว
+                const existingQueueItem = syncQueue.find(q => q.id === existingQueueId);
+                if (existingQueueItem) {
+                    // อัปเดตข้อมูลในคิวเดิม
+                    existingQueueItem.data = { ...existingQueueItem.data, ...data };
+                    existingQueueItem.timestamp = new Date().toISOString();
+                    saveSyncQueueToStorage();
+                    finalQueueId = existingQueueId;
+                    console.log(`อัปเดตข้อมูลในคิวเดิม: ${existingQueueId}`);
+                } else {
+                    // ไม่พบคิวเดิม สร้างใหม่
+                    finalQueueId = addToSyncQueue('update', markerType, data, rowKey);
+                }
+            } else {
+                // ✅ เป็นจุดจริง - สร้างคิวใหม่ตามปกติ
+                finalQueueId = addToSyncQueue('update', markerType, data, rowKey);
+            }
             
             // อัปเดตข้อมูลในมาร์กเกอร์ทันที (แสดงผลทันที)
-            editingMarker._popupData = { 
-                ...editingMarker._popupData, 
-                ...data, 
-                queued: true, 
-                queueId 
+            editingMarker._popupData = {
+                ...editingMarker._popupData,
+                ...data,
+                queued: true,
+                queueId: finalQueueId
             };
+            
             setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
             
             // ปิดหน้าต่าง
@@ -1068,11 +1089,10 @@
             // ✅ เริ่มกระบวนการซิงค์ทันที
             setTimeout(() => {
                 console.log('🔄 เริ่มซิงค์คิวข้อมูล...');
-                processDataSyncQueue();
-                // รูปภาพถูกทริกเกอร์จาก saveImageToDB แล้ว ไม่ต้องเรียกซ้ำ
+                processSyncQueue();
             }, 500);
             
-            return { queued: true, queueId };
+            return { queued: true, queueId: finalQueueId };
         }
 
         async function processDataSyncQueue() {

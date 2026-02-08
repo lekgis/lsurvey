@@ -17,7 +17,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
+    <!-- เพิ่มในส่วน <head> ของไฟล์ HTML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
     <style>
         body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
         #map { height: 100vh; width: 100vw; z-index: 0; }
@@ -544,11 +547,12 @@
                         <tr>
                             <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
                             <th>รหัส</th>
-                            <th>ชื่อกิจการ</th>
-                            <th>ประเภท</th>
+                            <th>ลักษณะ</th>
                             <th>กว้าง (ม.)</th>
                             <th>ยาว (ม.)</th>
+                            <th>จำนวนด้าน</th>
                             <th>ข้อความ</th>
+                            <th>ตรวจสอบ</th> <!-- ✅ เพิ่มบรรทัดนี้ -->
                             <th style="width: 60px">ซูม</th>
                         </tr>
                     </thead>
@@ -939,7 +943,7 @@
         }
 
         // ============================================
-        // ฟังก์ชันบันทึกข้อมูล (เวอร์ชันรวม) - สร้างคิวทุกกรณี + จัดการรูปภาพสมบูรณ์
+        // ฟังก์ชันบันทึกข้อมูล (แก้ไขส่วนจัดการรูปภาพ)
         // ============================================
         async function saveSurveyData() {
             const form = document.getElementById('survey-form');
@@ -970,15 +974,26 @@
                 return;
             }
             
-            // จัดการรูปภาพ
+            // ============================================
+            // จัดการรูปภาพ - ตั้งชื่อไฟล์อัตโนมัติ
+            // ============================================
             let imageFilename = null;
+            let imageBase64 = null;
             const fileInput = form.querySelector('input[type="file"]');
-            
+
             if (fileInput && fileInput.files[0]) {
                 const file = fileInput.files[0];
                 const maxSize = markerType === 'building' ? 1500 : 2000;
                 
-                // ฟังก์ชันปรับขนาดรูปภาพพร้อม fallback
+                // ✅ ตั้งชื่อไฟล์อัตโนมัติจากข้อมูลในฟอร์ม
+                const prefix = markerType === 'building' ? 'B' : 'S';
+                const code = data.building_c || data.s_code || Date.now().toString().slice(-5);
+                const extension = file.name.split('.').pop().toLowerCase();
+                
+                // ✅ ชื่อไฟล์แบบมาตรฐาน: B00854.jpg หรือ S12345.jpg
+                imageFilename = `${prefix}${code}.${extension}`;
+                
+                // ฟังก์ชันปรับขนาดรูปภาพ (โค้ดเดิม)
                 const resizeImage = (file, maxWidth = maxSize, maxHeight = maxSize) => {
                     return new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -1017,10 +1032,9 @@
                 };
                 
                 try {
-                    let imageBase64 = await resizeImage(file, maxSize, maxSize);
-                    const base64Data = imageBase64.split(',')[1];
+                    let imageDataUrl = await resizeImage(file, maxSize, maxSize);
+                    const base64Data = imageDataUrl.split(',')[1];
                     imageBase64 = `${file.type};base64,${base64Data}`;
-                    imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
                     
                     // ✅ บันทึกรูปภาพลง IndexedDB
                     await saveImageToDB(imageBase64, imageFilename, rowKey, markerType);
@@ -1032,9 +1046,9 @@
                         const arrayBuffer = await file.arrayBuffer();
                         const bytes = [...new Uint8Array(arrayBuffer)];
                         const binary = bytes.map(b => String.fromCharCode(b)).join('');
-                        const fallbackBase64 = `${file.type};base64,${btoa(binary)}`;
-                        imageFilename = data.building_c || data.s_code || `IMG_${Date.now()}.jpg`;
-                        await saveImageToDB(fallbackBase64, imageFilename, rowKey, markerType);
+                        imageBase64 = `${file.type};base64,${btoa(binary)}`;
+                        
+                        await saveImageToDB(imageBase64, imageFilename, rowKey, markerType);
                         console.log(`⚠️ รูปภาพบันทึกแบบไม่ปรับขนาด: ${imageFilename}`);
                     } catch (fallbackErr) {
                         console.error('Fallback failed:', fallbackErr);
@@ -1042,10 +1056,10 @@
                     }
                 }
             }
-            
+
             // เพิ่มข้อมูลรูปภาพลงในข้อมูลคิว
-            if (imageFilename) {
-                data.imageFilename = imageFilename;
+            if (imageFilename && imageBase64) {
+                data.imageFilename = imageFilename; // ✅ ชื่อไฟล์ที่ตั้งไว้แล้ว
                 data.hasImage = true;
             }
             
@@ -1519,7 +1533,8 @@
                 { id: 'comment', label: 'หมายเหตุ', type: 'text' },
                 { id: 'fullname', label: 'เจ้าของ', type: 'text' },
                 { id: 'address', label: 'ที่อยู่', type: 'text' },
-                { id: 'picture', label: 'ถ่ายรูป', type: 'file' }
+                { id: 'picture', label: 'ถ่ายรูป', type: 'file' },
+                { id: 'check', label: 'สถานะการตรวจสอบ', type: 'select', options: ['ยังไม่สำรวจ', 'ถ่ายรูปแล้ว', 'ตรวจสอบแล้ว'] }
             ];
             
             const fields = type === 'building' ? buildingFields : signFields;
@@ -1708,39 +1723,36 @@
         // ฟังก์ชันสร้างแถวข้อมูลสิ่งปลูกสร้าง
         function renderBuildingTable() {
             const tbody = document.getElementById('building-table-body');
-            
             if (allBuildings.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลสิ่งปลูกสร้าง</td></tr>';
                 return;
             }
-            
             tbody.innerHTML = allBuildings.map((building, index) => {
                 if (!building.lat_long) return '';
-                
                 const [lat, lng] = building.lat_long.split(',').map(Number);
-                const statusClass = building.check === 'ถ่ายรูปแล้ว' ? 'status-ถ่ายรูปแล้ว' : 
+                
+                // ✅ แก้ไขให้แสดงสถานะตรงกับข้อมูลจริง
+                const statusClass = building.check === 'ถ่ายรูปแล้ว' ? 'status-ถ่ายรูปแล้ว' :
                                    building.check === 'ตรวจสอบแล้ว' ? 'status-ตรวจสอบแล้ว' : 'status-ยังไม่สำรวจ';
-                const statusText = building.check === 'ถ่ายรูปแล้ว' ? 'ตรวจสอบแล้ว' : 
-                                  building.check === 'ตรวจสอบแล้ว' ? 'ปฏิเสธ' : 'รอดำเนินการ';
+                const statusText = building.check || 'ยังไม่สำรวจ'; // ✅ แสดงค่าจริงจากข้อมูล
                 
                 return `
-                    <tr>
-                        <td><span class="marker-icon marker-building"></span></td>
-                        <td class="font-medium">${building.building_c || '-'}</td>
-                        <td>${building.full_name || '-'}</td>
-                        <td>${building.address || '-'}</td>
-                        <td>${building.b_type || '-'}</td>
-                        <td>${building.b_area || '-'}</td>
-                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td>
-                            <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
-                                <i data-lucide="locate" class="w-3 h-3 inline"></i>
-                            </button>
-                        </td>
-                    </tr>
+                <tr>
+                    <td><span class="marker-icon marker-building"></span></td>
+                    <td class="font-medium">${building.building_c || '-'}</td>
+                    <td>${building.full_name || '-'}</td>
+                    <td>${building.address || '-'}</td>
+                    <td>${building.b_type || '-'}</td>
+                    <td>${building.b_area || '-'}</td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td>
+                        <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
+                            <i data-lucide="locate" class="w-3 h-3 inline"></i>
+                        </button>
+                    </td>
+                </tr>
                 `;
             }).join('');
-            
             lucide.createIcons();
         }
         // ============================================
@@ -1955,90 +1967,315 @@
         }
 
         /**
-         * แสดงแกลเลอรี่รูปภาพ
+         * แสดงแกลเลอรี่รูปภาพ - เวอร์ชันแก้ไข
          */
         function showImageGallery(items, type) {
-          // สร้างหน้าต่างแกลเลอรี่
-          const galleryDiv = document.createElement('div');
-          galleryDiv.id = 'image-gallery-modal';
-          galleryDiv.className = 'fixed inset-0 bg-black/90 z-[3000] flex flex-col p-4 overflow-hidden';
-          galleryDiv.innerHTML = `
+            // ✅ ข้อ 1: กรองเฉพาะรูปที่มีลิ้งค์
+            const filteredItems = items.filter(item => {
+                if (type === 'building') {
+                    return item.image && item.image.trim() !== '';
+                } else {
+                    return item.picture && item.picture.trim() !== '';
+                }
+            });
+            
+            if (filteredItems.length === 0) {
+                showNotificationLeft('ไม่พบรูปภาพที่มีลิ้งค์', 'warning');
+                return;
+            }
+            
+            // สร้างหน้าต่างแกลเลอรี่
+            const galleryDiv = document.createElement('div');
+            galleryDiv.id = 'image-gallery-modal';
+            galleryDiv.className = 'fixed inset-0 bg-black/90 z-[3000] flex flex-col p-4 overflow-hidden';
+            
+            // ✅ ค่าเริ่มต้น: แสดงเป็นรายชื่อ
+            let isGridView = false;
+            
+            galleryDiv.innerHTML = `
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-white text-xl font-bold">
-                ${type === 'building' ? 'รูปภาพสิ่งปลูกสร้าง' : 'รูปภาพป้าย'} (${items.length} รูป)
-              </h3>
-              <button onclick="closeImageGallery()" class="text-white hover:text-gray-300 transition">
-                <i data-lucide="x" class="w-8 h-8"></i>
-              </button>
-            </div>
-            <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 flex-1 overflow-y-auto">
-              ${items.map((item, index) => `
-                <div class="relative group cursor-pointer" onclick="openImageViewer(${index}, '${type}')">
-                  <img src="${item.image || item.picture}" 
-                       alt="รูปภาพ ${index + 1}" 
-                       class="w-full h-32 object-cover rounded-lg hover:opacity-75 transition"
-                       onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
-                  <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">ดูรูปใหญ่</span>
-                  </div>
-                  <div class="mt-1 text-xs text-white truncate">
-                    ${type === 'building' ? (item.building_c || item.full_name || '-') : (item.s_code || item.s_name || '-')}
-                  </div>
+                <h3 class="text-white text-xl font-bold">
+                    ${type === 'building' ? 'รูปภาพสิ่งปลูกสร้าง' : 'รูปภาพป้าย'} (${filteredItems.length} รูป)
+                </h3>
+                <div class="flex gap-2">
+                    <!-- ✅ ปุ่มสลับมุมมอง (ค่าเริ่มต้น: แสดงเป็นภาพ) -->
+                    <button onclick="toggleGalleryView()" id="btn-toggle-view" class="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition flex items-center gap-2">
+                        <i data-lucide="grid" id="view-icon" class="w-4 h-4"></i>
+                        <span id="view-text">แสดงเป็นภาพ</span>
+                    </button>
+                    <!-- ✅ ปุ่มดาวน์โหลดทั้งหมด -->
+                    <button onclick="downloadAllImagesAsZip(${JSON.stringify(filteredItems.map(item => ({
+                        url: type === 'building' ? item.image : item.picture,
+                        filename: type === 'building' ? (item.building_c || 'building') : (item.s_code || 'sign')
+                    })))}, '${type}')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>ดาวน์โหลดทั้งหมด</span>
+                    </button>
+                    <button onclick="closeImageGallery()" class="text-white hover:text-gray-300 transition">
+                        <i data-lucide="x" class="w-8 h-8"></i>
+                    </button>
                 </div>
-              `).join('')}
             </div>
-            <div class="mt-4 text-center">
-              <button onclick="closeImageGallery()" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition">
-                ปิด
-              </button>
+            <!-- ✅ คอนเทนเนอร์สำหรับสลับมุมมอง -->
+            <div id="gallery-container" class="flex-1 overflow-y-auto">
+                <!-- จะถูกแทนที่ด้วยฟังก์ชัน toggleGalleryView() -->
             </div>
-          `;
-          
-          document.body.appendChild(galleryDiv);
-          lucide.createIcons();
+            `;
+            
+            document.body.appendChild(galleryDiv);
+            lucide.createIcons();
+            
+            // ✅ เริ่มต้นด้วยมุมมองรายชื่อ
+            renderGalleryListView(filteredItems, type);
+        }
+
+        // ✅ ประกาศตัวแปรสำหรับเก็บสถานะมุมมองและข้อมูลปัจจุบัน
+        let currentGalleryItems = [];
+        let currentGalleryType = '';
+        let isGridView = false; // ✅ ค่าเริ่มต้น: false = แสดงเป็นรายชื่อ
+
+        /**
+         * ✅ ฟังก์ชันสลับระหว่างมุมมองภาพตัวอย่างกับรายชื่อ
+         */
+        function toggleGalleryView() {
+            isGridView = !isGridView;
+            
+            const btn = document.getElementById('btn-toggle-view');
+            const icon = document.getElementById('view-icon');
+            const text = document.getElementById('view-text');
+            
+            if (isGridView) {
+                // สลับไปมุมมองภาพตัวอย่าง
+                btn.className = 'bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition flex items-center gap-2';
+                icon.innerHTML = '<i data-lucide="list" class="w-4 h-4"></i>';
+                text.textContent = 'แสดงเป็นรายชื่อ';
+                renderGalleryGridView(currentGalleryItems, currentGalleryType);
+            } else {
+                // สลับไปมุมมองรายชื่อ
+                btn.className = 'bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition flex items-center gap-2';
+                icon.innerHTML = '<i data-lucide="grid" class="w-4 h-4"></i>';
+                text.textContent = 'แสดงเป็นภาพ';
+                renderGalleryListView(currentGalleryItems, currentGalleryType);
+            }
+            
+            lucide.createIcons();
         }
 
         /**
-         * เปิดดูรูปภาพขนาดใหญ่
+         * ✅ แสดงมุมมองภาพตัวอย่าง (Grid View)
+         */
+        function renderGalleryGridView(items, type) {
+            currentGalleryItems = items;
+            currentGalleryType = type;
+            
+            const container = document.getElementById('gallery-container');
+            
+            container.innerHTML = `
+            <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                ${items.map((item, index) => `
+                <div class="relative group cursor-pointer" onclick="openImageViewer(${index}, '${type}')">
+                    <img src="${type === 'building' ? item.image : item.picture}"
+                        alt="รูปภาพ ${index + 1}"
+                        class="w-full h-32 object-cover rounded-lg hover:opacity-75 transition"
+                        onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                        <span class="text-white text-sm font-bold">ดูรูปใหญ่</span>
+                    </div>
+                    <div class="mt-1 text-xs text-white truncate">
+                        ${type === 'building' ? (item.building_c || item.full_name || '-') : (item.s_code || item.s_name || '-')}
+                    </div>
+                </div>
+                `).join('')}
+            </div>
+            `;
+            
+            lucide.createIcons();
+        }
+
+        /**
+         * ✅ แสดงมุมมองรายชื่อ (List View)
+         */
+        function renderGalleryListView(items, type) {
+            currentGalleryItems = items;
+            currentGalleryType = type;
+            
+            const container = document.getElementById('gallery-container');
+            
+            container.innerHTML = `
+            <div class="bg-gray-800 rounded-lg overflow-hidden">
+                <div class="grid grid-cols-[40px_1fr_120px_80px] gap-2 p-3 bg-gray-700 text-white font-bold text-sm">
+                    <span>#</span>
+                    <span>ชื่อ</span>
+                    <span>ขนาด</span>
+                    <span>ดาวน์โหลด</span>
+                </div>
+                <div class="max-h-[calc(100vh-150px)] overflow-y-auto">
+                    ${items.map((item, index) => `
+                    <div class="grid grid-cols-[40px_1fr_120px_80px] gap-2 p-3 border-b border-gray-700 hover:bg-gray-700/50 transition cursor-pointer" onclick="openImageViewer(${index}, '${type}')">
+                        <span class="text-gray-400 text-sm">${index + 1}</span>
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="image" class="w-4 h-4 text-blue-400"></i>
+                            <span class="text-white truncate">
+                                ${type === 'building' ? (item.building_c || item.full_name || '-') : (item.s_code || item.s_name || '-')}
+                            </span>
+                        </div>
+                        <span class="text-gray-400 text-xs">-</span>
+                        <button onclick="event.stopPropagation(); downloadSingleImage('${type === 'building' ? item.image : item.picture}', '${type === 'building' ? (item.building_c || 'building') : (item.s_code || 'sign')}')" 
+                            class="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition text-xs flex items-center justify-center gap-1">
+                            <i data-lucide="download" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+            `;
+            
+            lucide.createIcons();
+        }
+
+        /**
+         * ✅ ดาวน์โหลดรูปภาพเดียว
+         */
+        function downloadSingleImage(url, filename) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${filename}_${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotificationLeft(`ดาวน์โหลด ${filename} สำเร็จ!`, 'success');
+        }
+
+        async function downloadAllImagesAsZip(items, type) {
+            showNotificationLeft(`กำลังเตรียมดาวน์โหลด ${items.length} รูป...`, 'info');
+            
+            try {
+                // โหลดไลบรารี JSZip
+                if (typeof JSZip === 'undefined') {
+                    alert('กรุณาเพิ่มไลบรารี JSZip ก่อนใช้งานฟีเจอร์นี้');
+                    return;
+                }
+                
+                const zip = new JSZip();
+                const folderName = type === 'building' ? 'buildings' : 'signs';
+                const folder = zip.folder(folderName);
+                
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const imageUrl = item.url;
+                    const baseFilename = item.filename || `image_${i + 1}`;
+                    
+                    try {
+                        // ดาวน์โหลดรูปภาพเป็น Blob
+                        const response = await fetch(imageUrl);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        
+                        const blob = await response.blob();
+                        
+                        // ตรวจสอบนามสกุลไฟล์
+                        let extension = '.jpg';
+                        const contentType = blob.type;
+                        if (contentType === 'image/png') extension = '.png';
+                        else if (contentType === 'image/jpeg') extension = '.jpg';
+                        else if (contentType === 'image/gif') extension = '.gif';
+                        
+                        // ใช้ชื่อไฟล์เดิม + วันที่เวลาป้องกันชื่อซ้ำ
+                        const timestamp = Date.now();
+                        const filename = `${baseFilename}_${timestamp}${extension}`;
+                        
+                        // เพิ่มไฟล์ลงใน ZIP
+                        folder.file(filename, blob);
+                        successCount++;
+                        
+                        console.log(`✅ ดาวน์โหลด ${filename} สำเร็จ (${i + 1}/${items.length})`);
+                        
+                    } catch (err) {
+                        console.error(`❌ ดาวน์โหลดรูปที่ ${i + 1} ล้มเหลว:`, err);
+                        failCount++;
+                    }
+                    
+                    // อัปเดตสถานะ
+                    showNotificationLeft(`กำลังดาวน์โหลด... (${i + 1}/${items.length})`, 'info');
+                }
+                
+                // สร้างไฟล์ ZIP
+                showNotificationLeft('กำลังสร้างไฟล์ ZIP...', 'info');
+                
+                const content = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
+                
+                // ✅ แก้ไข: แยกตัวแปรให้ถูกต้อง
+                const zipFilename = `${folderName}_${new Date().toISOString().slice(0, 10)}_${items.length}_items.zip`;
+                
+                // ดาวน์โหลดไฟล์ ZIP
+                saveAs(content, zipFilename);
+                
+                showNotificationLeft(
+                    `ดาวน์โหลดสำเร็จ! (${successCount} รูป${failCount > 0 ? `, ล้มเหลว ${failCount} รูป` : ''})`,
+                    failCount > 0 ? 'warning' : 'success'
+                );
+                
+            } catch (err) {
+                console.error('Error creating ZIP:', err);
+                showNotificationLeft('เกิดข้อผิดพลาดในการสร้างไฟล์ ZIP', 'error');
+            }
+        }
+
+        /**
+         * เปิดดูรูปภาพขนาดใหญ่ - เวอร์ชันแก้ไข
          */
         function openImageViewer(index, type) {
-          // ดึงข้อมูลจากหน้าต่างแกลเลอรี่
-          const gallery = document.getElementById('image-gallery-modal');
-          const items = type === 'building' ? allBuildings.filter(b => b.image) : allSigns.filter(s => s.picture);
-          const item = items[index];
-          
-          if (!item) return;
-          
-          // สร้างหน้าต่างดูรูปใหญ่
-          const viewerDiv = document.createElement('div');
-          viewerDiv.id = 'image-viewer-modal';
-          viewerDiv.className = 'fixed inset-0 bg-black/95 z-[3001] flex items-center justify-center p-4';
-          viewerDiv.onclick = (e) => {
-            if (e.target === viewerDiv) closeImageViewer();
-          };
-          viewerDiv.innerHTML = `
+            const items = currentGalleryItems;
+            const item = items[index];
+            
+            if (!item) return;
+            
+            // สร้างหน้าต่างดูรูปใหญ่
+            const viewerDiv = document.createElement('div');
+            viewerDiv.id = 'image-viewer-modal';
+            viewerDiv.className = 'fixed inset-0 bg-black/95 z-[3001] flex items-center justify-center p-4';
+            viewerDiv.onclick = (e) => {
+                if (e.target === viewerDiv) closeImageViewer();
+            };
+            
+            // ✅ ใช้ลิ้งค์ที่ถูกต้องตามประเภท
+            const imageUrl = type === 'building' ? item.image : item.picture;
+            const code = type === 'building' ? item.building_c : item.s_code;
+            const name = type === 'building' ? item.full_name : item.s_name;
+            const address = type === 'building' ? item.address : item.comment;
+            
+            viewerDiv.innerHTML = `
             <div class="relative max-w-4xl w-full">
-              <img src="${item.image || item.picture}" 
-                   alt="รูปภาพ" 
-                   class="w-full max-h-[80vh] object-contain rounded-lg"
-                   onerror="this.src='https://via.placeholder.com/800x600?text=No+Image'">
-              <div class="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-3 rounded-lg">
-                <p class="font-bold">${type === 'building' ? 'สิ่งปลูกสร้าง:' : 'ป้าย:'} ${item.building_c || item.s_code || '-'}</p>
-                <p class="text-sm">${item.full_name || item.s_name || ''}</p>
-                <p class="text-xs mt-1">${item.address || item.comment || ''}</p>
-              </div>
-              <button onclick="closeImageViewer()" class="absolute top-4 right-4 text-white hover:text-gray-300 transition">
-                <i data-lucide="x" class="w-8 h-8"></i>
-              </button>
-              <button onclick="downloadImage('${item.image || item.picture}', '${item.building_c || item.s_code || 'image'}')" 
-                      class="absolute top-4 left-4 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition">
-                <i data-lucide="download" class="w-5 h-5"></i>
-              </button>
+                <img src="${imageUrl}"
+                    alt="รูปภาพ"
+                    class="w-full max-h-[80vh] object-contain rounded-lg"
+                    onerror="this.src='https://via.placeholder.com/800x600?text=No+Image'">
+                <div class="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-3 rounded-lg">
+                    <p class="font-bold">${type === 'building' ? 'สิ่งปลูกสร้าง:' : 'ป้าย:'} ${code || '-'}</p>
+                    <p class="text-sm">${name || ''}</p>
+                    <p class="text-xs mt-1">${address || ''}</p>
+                </div>
+                <button onclick="closeImageViewer()" class="absolute top-4 right-4 text-white hover:text-gray-300 transition">
+                    <i data-lucide="x" class="w-8 h-8"></i>
+                </button>
+                <button onclick="downloadSingleImage('${imageUrl}', '${code || 'image'}')"
+                    class="absolute top-4 left-4 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                </button>
             </div>
-          `;
-          
-          document.body.appendChild(viewerDiv);
-          lucide.createIcons();
+            `;
+            
+            document.body.appendChild(viewerDiv);
+            lucide.createIcons();
         }
 
         /**
@@ -2224,35 +2461,37 @@
         // ฟังก์ชันสร้างแถวข้อมูลป้าย
         function renderSignTable() {
             const tbody = document.getElementById('sign-table-body');
-            
             if (allSigns.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลป้าย</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">ไม่มีข้อมูลป้าย</td></tr>';
                 return;
             }
-            
             tbody.innerHTML = allSigns.map((sign, index) => {
                 if (!sign.lat_long) return '';
-                
                 const [lat, lng] = sign.lat_long.split(',').map(Number);
                 
+                // ✅ แก้ไขให้แสดงสถานะตรงกับข้อมูลจริง
+                const statusClass = sign.check === 'ถ่ายรูปแล้ว' ? 'status-ถ่ายรูปแล้ว' :
+                                   sign.check === 'ตรวจสอบแล้ว' ? 'status-ตรวจสอบแล้ว' : 'status-ยังไม่สำรวจ';
+                const statusText = sign.check || 'ยังไม่สำรวจ'; // ✅ แสดงค่าจริงจากข้อมูล
+                
                 return `
-                    <tr>
-                        <td><span class="marker-icon marker-sign"></span></td>
-                        <td class="font-medium">${sign.s_code || '-'}</td>
-                        <td>${sign.s_name || '-'}</td>
-                        <td>${sign.s_type || '-'}</td>
-                        <td>${sign.s_wide || '-'}</td>
-                        <td>${sign.s_length || '-'}</td>
-                        <td>${sign.s_text || '-'}</td>
-                        <td>
-                            <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
-                                <i data-lucide="locate" class="w-3 h-3 inline"></i>
-                            </button>
-                        </td>
-                    </tr>
+                <tr>
+                    <td><span class="marker-icon marker-sign"></span></td>
+                    <td class="font-medium">${sign.s_code || '-'}</td>      <!-- 1. รหัส -->
+                    <td>${sign.s_characte || '-'}</td>                      <!-- 2. ลักษณะ -->
+                    <td>${sign.s_wide || '-'}</td>                          <!-- 3. กว้าง -->
+                    <td>${sign.s_length || '-'}</td>                        <!-- 4. ยาว -->
+                    <td>${sign.no_side || '-'}</td>                         <!-- 5. จำนวนด้าน -->
+                    <td>${sign.s_text || '-'}</td>                          <!-- 6. ข้อความ -->
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td> <!-- 7. ตรวจสอบ -->
+                    <td>
+                        <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
+                            <i data-lucide="locate" class="w-3 h-3 inline"></i>
+                        </button>
+                    </td>
+                </tr>
                 `;
             }).join('');
-            
             lucide.createIcons();
         }
 
@@ -2860,16 +3099,16 @@
                     try {
                         console.log(`📤 ส่งรูปภาพ: ${image.filename} (${image.relatedId})`);
                         
-                        // ✅ สร้าง payload ว่าง (เพื่อให้เซิร์ฟเวอร์รับได้)
+                        // ✅ ใช้ชื่อไฟล์ที่บันทึกไว้ใน IndexedDB (ไม่ต้องแยกอีก)
                         const payload = {};
                         
                         const body = new URLSearchParams();
                         body.append('action', 'update');
                         body.append('type', image.type);
                         body.append('rowKey', image.relatedId);
-                        body.append('payload', JSON.stringify(payload)); // ✅ เพิ่มบรรทัดนี้
+                        body.append('payload', JSON.stringify(payload));
                         body.append('image', image.imageData);
-                        body.append('fileName', image.filename);
+                        body.append('fileName', image.filename); // ✅ ใช้ชื่อที่ตั้งไว้แล้ว
                         
                         const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
                             method: 'POST',
@@ -3374,6 +3613,74 @@
             
             return marker;
         }
+
+        // ============================================
+        // ดาวน์โหลดรูปทั้งหมดจากสเปรดชีต
+        // ============================================
+        document.addEventListener('DOMContentLoaded', function() {
+            const downloadBtn = document.getElementById('download-all-images');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', async function() {
+                    try {
+                        showNotificationLeft('กำลังโหลดข้อมูลรูปภาพ...', 'info');
+                        
+                        // ดึงข้อมูลจากสเปรดชีต
+                        const response = await fetch(CONFIG.SCRIPT_URL + '?action=getData');
+                        const data = await response.json();
+                        
+                        // รวมรูปจากทั้งอาคารและป้าย
+                        const allImages = [
+                            ...data.buildings.filter(b => b.image && b.image.includes('http')),
+                            ...data.signs.filter(s => s.image && s.image.includes('http'))
+                        ];
+                        
+                        if (allImages.length === 0) {
+                            showNotificationLeft('⚠️ ไม่พบรูปภาพในระบบ', 'warning');
+                            return;
+                        }
+                        
+                        showNotificationLeft(`กำลังดาวน์โหลด ${allImages.length} รูปภาพ...`, 'info');
+                        
+                        // ดาวน์โหลดทีละรูป
+                        for (let i = 0; i < allImages.length; i++) {
+                            const item = allImages[i];
+                            const imageUrl = item.image;
+                            const fileName = item.picture || `image_${i + 1}.jpg`;
+                            
+                            try {
+                                // ดาวน์โหลดรูป
+                                const imgResponse = await fetch(imageUrl);
+                                const blob = await imgResponse.blob();
+                                
+                                // สร้างลิงก์ดาวน์โหลด
+                                const link = document.createElement('a');
+                                link.href = URL.createObjectURL(blob);
+                                link.download = fileName;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                URL.revokeObjectURL(link.href);
+                                
+                                console.log(`✅ ดาวน์โหลด: ${fileName}`);
+                                
+                                // รอ 500ms ระหว่างดาวน์โหลดแต่ละรูป
+                                if (i < allImages.length - 1) {
+                                    await new Promise(resolve => setTimeout(resolve, 500));
+                                }
+                            } catch (err) {
+                                console.error(`❌ ดาวน์โหลด ${fileName} ล้มเหลว:`, err);
+                                showNotificationLeft(`⚠️ ดาวน์โหลด ${fileName} ล้มเหลว`, 'error');
+                            }
+                        }
+                        
+                        showNotificationLeft(`✅ ดาวน์โหลดรูปภาพทั้งหมด (${allImages.length} รูป) เสร็จสิ้น!`, 'success');
+                    } catch (err) {
+                        console.error('❌ ข้อผิดพลาด:', err);
+                        showNotificationLeft('❌ ดาวน์โหลดล้มเหลว: ' + err.message, 'error');
+                    }
+                });
+            }
+        });
 
         // ฟังก์ชันโหลดมาร์กเกอร์เฉพาะที่มองเห็น + buffer
         function loadVisibleMarkers() {

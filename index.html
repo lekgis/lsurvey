@@ -2187,10 +2187,11 @@
 
         // เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
         function enableMarkerDragging(marker, data) {
-            if (!isEditMode) return;
+            // ✅ ตรวจสอบ marker มีอยู่จริง + มีเมธอดที่จำเป็น
+            if (!isEditMode || !marker || !marker.on || !marker.off) return;
             
-            // ✅ เปิดใช้งานการลาก
-            if (marker.dragging && marker.dragging.enable) {
+            // ✅ เปิดใช้งานการลาก (ตรวจสอบก่อนเรียก)
+            if (marker.dragging?.enable) {
                 marker.dragging.enable();
             }
             
@@ -2200,7 +2201,6 @@
                 const newLatLng = e.target.getLatLng();
                 const marker = e.target;
                 const data = marker._popupData;
-                
                 if (data) {
                     await updateMarkerPosition(marker, data, newLatLng);
                 }
@@ -2544,44 +2544,29 @@
         }
 
         // ============================================
-        // ฟังก์ชันซิงค์รูปภาพที่ยังไม่ได้ส่ง (แก้ไขแล้ว)
+        // ฟังก์ชันซิงค์รูปภาพที่ยังไม่ได้ส่ง (เวอร์ชันแก้ไข)
         // ============================================
         async function syncPendingImages() {
             try {
                 const unsyncedImages = await getUnsyncedImages();
-                
                 if (unsyncedImages.length === 0) return;
                 
                 showNotificationLeft(`กำลังอัปโหลดรูปภาพ (${unsyncedImages.length} รูป)...`, 'info');
                 
                 for (const image of unsyncedImages) {
                     try {
-                        // ✅ ตรวจสอบว่ารูปภาพถูกส่งแล้วหรือไม่
-                        if (image.synced) {
-                            console.log(`รูปภาพ ${image.filename} ถูกส่งแล้ว ข้าม...`);
-                            continue;
-                        }
-                        
-                        // หาข้อมูลที่เกี่ยวข้อง
-                        const relatedData = syncQueue.find(q => q.rowKey === image.relatedId);
-                        
-                        if (!relatedData) {
-                            console.warn(`ไม่พบข้อมูลที่เกี่ยวข้องกับรูปภาพ ${image.id}`);
-                            continue;
-                        }
-                        
                         // ✅ ส่งรูปภาพไปยังเซิร์ฟเวอร์
                         const body = new URLSearchParams();
                         body.append('action', 'updateImage');
                         body.append('type', image.type);
                         body.append('rowKey', image.relatedId);
-                        body.append('image', image.data);
+                        body.append('image', image.imageData); // ✅ ใช้ชื่อฟิลด์ที่ถูกต้อง
                         body.append('fileName', image.filename);
                         
                         const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
                             method: 'POST',
                             body,
-                            timeout: 60000 // 60 วินาที (รูปภาพใช้เวลานานกว่า)
+                            timeout: 60000 // 60 วินาที
                         });
                         
                         if (res.ok) {
@@ -2606,7 +2591,6 @@
                 
                 // ลบรูปภาพที่ซิงค์สำเร็จแล้ว
                 await cleanupSyncedImages();
-                
             } catch (err) {
                 console.error('Error syncing images:', err);
             }
@@ -2862,33 +2846,39 @@
             }
         }
 
-        // ดึงรูปภาพที่ยังไม่ได้ซิงค์
+        // ============================================
+        // ฟังก์ชันดึงรูปภาพที่ยังไม่ได้ซิงค์ (เวอร์ชันแก้ไขแล้ว)
+        // ============================================
         async function getUnsyncedImages() {
             const db = await openDatabase();
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction('images', 'readonly');
                 const store = transaction.objectStore('images');
-                const index = store.index('synced');
-                const range = IDBKeyRange.only(false);
-                
-                const request = index.openCursor(range);
-                const images = [];
+                // ✅ ใช้ openCursor แทนการใช้ดัชนี boolean
+                const request = store.openCursor();
+                const unsyncedImages = [];
                 
                 request.onsuccess = (event) => {
                     const cursor = event.target.result;
                     if (cursor) {
-                        images.push(cursor.value);
+                        const image = cursor.value;
+                        // ✅ ตรวจสอบค่าโดยตรงแทนการใช้ดัชนี
+                        if (!image.synced || image.synced === false) {
+                            unsyncedImages.push(image);
+                        }
                         cursor.continue();
                     } else {
-                        resolve(images);
+                        resolve(unsyncedImages);
                     }
                 };
                 
-                request.onerror = () => {
-                    reject(request.error);
+                request.onerror = (event) => {
+                    console.error('Error getting unsynced images:', event.target.error);
+                    reject(event.target.error);
                 };
             });
         }
+
 
         // ทำเครื่องหมายว่ารูปภาพซิงค์สำเร็จแล้ว
         async function markImageAsSynced(imageId) {
@@ -2923,23 +2913,27 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction('images', 'readwrite');
                 const store = transaction.objectStore('images');
-                const index = store.index('synced');
-                const range = IDBKeyRange.only(true);
                 
-                const request = index.openCursor(range);
+                // ✅ ใช้ openCursor แทนการใช้ดัชนี (แก้ไขปัญหา IDBKeyRange)
+                const request = store.openCursor();
                 
                 request.onsuccess = (event) => {
                     const cursor = event.target.result;
                     if (cursor) {
-                        store.delete(cursor.primaryKey);
+                        const image = cursor.value;
+                        // ✅ ตรวจสอบค่าด้วยตนเอง
+                        if (image.synced === true) {
+                            store.delete(cursor.primaryKey);
+                        }
                         cursor.continue();
                     } else {
                         resolve();
                     }
                 };
                 
-                request.onerror = () => {
-                    reject(request.error);
+                request.onerror = (event) => {
+                    console.error('Error cleaning up synced images:', event.target.error);
+                    reject(event.target.error);
                 };
             });
         }
@@ -3267,17 +3261,6 @@
                     if (isEditMode) enableMarkerDragging(m, item);
                 }
             }
-        }
-
-
-
-
-
-
-        // ในฟังก์ชัน realtimeUpdate() หลังจากอัปเดตสำเร็จ
-        if (delta.buildings?.length > 0 || delta.signs?.length > 0 || delta.deleted?.length > 0) {
-            const count = (delta.buildings?.length || 0) + (delta.signs?.length || 0) + (delta.deleted?.length || 0);
-            showNotificationLeft(`🔄 มีการอัปเดตข้อมูล ${count} รายการจากผู้ใช้อื่น`, 'info');
         }
 
 

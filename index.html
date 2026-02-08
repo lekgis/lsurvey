@@ -1485,9 +1485,9 @@
                 { id: 'building_c', label: 'รหัสสิ่งปลูกสร้าง', type: 'text' },
                 { id: 'b_type', label: 'ประเภทสิ่งปลูกสร้าง', type: 'text' },
                 { id: 'b_mat', label: 'วัสดุ', type: 'select', options: ['ไม้', 'ตึก', 'ตึก/ไม้'] },  // ✅ แก้ตรงนี้
-                { id: 'b_year', label: 'อายุ (ปี)', type: 'number' },
+                { id: 'b_year', label: 'อายุ (ปี)', type: 'select', options: [1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 35, 40, 45, 50, 70, 80, 100], allowCustom: true },
                 { id: 'hs_no', label: 'บ้านเลขที่', type: 'text' },
-                { id: 'hs_moo', label: 'หมู่', type: 'text' },
+                { id: 'hs_moo', label: 'หมู่', type: 'select', options: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] },
                 { id: 'no_floor', label: 'ชั้น', type: 'number' },
                 { id: 'b_area', label: 'พื้นที่ทั้งหลัง (ตร.ม.)', type: 'number' },
                 { id: 'b_note', label: 'รายละเอียด', type: 'textarea' },

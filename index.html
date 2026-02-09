@@ -200,46 +200,6 @@
             transition-duration: 0.35s;
           }
         }
-        /* ============================================
-           ปรับขนาดตัวอักษรในเมนูแบบเลือกสำหรับมือถือ
-           ============================================ */
-        @media (max-width: 768px) {
-            /* ลดขนาดฟอนต์ใน <select> */
-            .side-panel select.form-input {
-                font-size: 11px !important; /* ลดจาก 0.9rem (14.4px) เป็น 11px */
-                padding: 0.4rem 0.6rem !important; /* ลด padding ให้พอดีกับฟอนต์เล็ก */
-                line-height: 1.2 !important;
-            }
-            
-            /* ลดขนาดฟอนต์ใน <option> (รองรับเบราว์เซอร์ที่อนุญาต) */
-            .side-panel select.form-input option {
-                font-size: 11px !important;
-                padding: 4px 8px !important;
-            }
-            
-            /* ปรับขนาดฟอนต์ใน <datalist> (สำหรับฟิลด์ที่ใช้ allowCustom) */
-            .side-panel input[list].form-input {
-                font-size: 11px !important;
-            }
-            
-            /* ปรับขนาดเลเบลให้สมดุล */
-            .side-panel .form-label {
-                font-size: 11px !important;
-                margin-bottom: 4px !important;
-            }
-            
-            /* ปรับขนาดปุ่มกล้องให้เล็กลงบนมือถือ */
-            .side-panel button[onclick*="camera"] {
-                padding: 8px 12px !important;
-                font-size: 10px !important;
-            }
-            
-            /* ปรับขนาดข้อความสถานะการตรวจสอบ */
-            .side-panel .bg-custom-check-status {
-                font-size: 10px !important;
-                padding: 2px 6px !important;
-            }
-        }
         /* แอนิเมชันสำหรับปุ่มฟันเฟือง */
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -4109,3 +4069,4 @@
 </body>
 
 </html>
+

@@ -3958,27 +3958,47 @@
         }
 
         // ============================================
-        // 2. วาง beforeunload ที่ระดับบนสุด (นอก window.load)
+        // 1. วางก่อน `window.addEventListener('load')` ทั้งหมด
         // ============================================
+
+        // หยุดระบบอัปเดตเมื่อปิดหน้าต่าง
         window.addEventListener('beforeunload', () => {
-            stopRealtimeAutoUpdate(); // ✅ หยุดระบบใหม่
+            stopRealtimeAutoUpdate();
+        });
+
+        // ตรวจจับการเชื่อมต่อออนไลน์
+        window.addEventListener('online', () => {
+            isOnline = true;
+            updateConnectionStatus();
+            // เมื่อกลับมาออนไลน์ ให้พยายามส่งข้อมูลที่ค้างอยู่
+            setTimeout(processSyncQueue, 1000);
+        });
+
+        // ตรวจจับการออฟไลน์
+        window.addEventListener('offline', () => {
+            isOnline = false;
+            updateConnectionStatus();
         });
 
         // ============================================
-        // 3. เริ่มต้นแอป (วางด้านล่าง beforeunload)
+        // 2. เริ่มต้นแอป (มีเพียง 1 ครั้งเดียว)
         // ============================================
         window.addEventListener('load', async () => {
+            // 1. เริ่มต้นแผนที่และไอคอน
             initMap();
             lucide.createIcons();
             
-            // ✅ เพิ่ม await และเริ่มระบบอัปเดต
-            await loadExistingData(); // ← เพิ่ม await
-            startRealtimeAutoUpdate(); // ← เพิ่มบรรทัดนี้ (สำคัญที่สุด!)
+            // 2. โหลดข้อมูลและเริ่มระบบอัปเดต
+            await loadExistingData();           // ← โหลดข้อมูลครั้งแรก
+            startRealtimeAutoUpdate();          // ← เริ่มระบบอัปเดตอัตโนมัติ (สำคัญที่สุด!)
             
+            // 3. ตรวจสอบและซิงค์ข้อมูลที่ค้างอยู่
             await checkAndSyncOnStartup();
+            
+            // 4. อัปเดตจุดแจ้งเตือนจำนวนข้อมูลที่รอซิงค์
             setInterval(updateSyncBadge, 1000);
             
-            // ลงทะเบียน Service Worker
+            // 5. ลงทะเบียน Service Worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js')
                     .then(registration => console.log('Service Worker registered:', registration.scope))

@@ -20,7 +20,7 @@
     <!-- เพิ่มในส่วน <head> ของไฟล์ HTML -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <style>
         body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
         #map { height: 100vh; width: 100vw; z-index: 0; }
@@ -278,8 +278,8 @@
             border: 2px solid white;
             cursor: pointer;
         }
-        .circle-building { background-color: #f59e0b; }
-        .circle-sign { background-color: #4ade80; }
+        .circle-building { background-color: #f97316; }
+        .circle-sign { background-color: #22c55e; }
         
         .user-location-dot {
             width: 14px; height: 14px;
@@ -656,15 +656,17 @@
         let isUpdating = false;
         let isUploadingImage = false; // [cite: 71]
 
+        let canvasRenderer; // ✅ ประกาศตัวแปรระดับโกลบอล
+
         function initMap() {
-            // ✅ ใช้ Canvas Renderer เป็นค่าเริ่มต้น
-            const canvasRenderer = L.canvas({ padding: 0.5 });
+            // ✅ สร้าง Canvas Renderer 1 ครั้ง
+            canvasRenderer = L.canvas({ padding: 0.5 });
             
             const mapOptions = {
                 zoomControl: false,
                 attributionControl: false,
                 preferCanvas: true,
-                renderer: canvasRenderer, // ✅ สำคัญมาก!
+                renderer: canvasRenderer, // ✅ ใช้ renderer เดียวกัน
                 zoomSnap: isMobile() ? 0.5 : 1,
                 wheelDebounceTime: 40,
                 doubleClickZoom: false
@@ -1299,7 +1301,6 @@
         async function updateMarkerPosition(marker, data, newLatLng) {
             const refreshBtn = document.getElementById('btn-refresh');
             const refreshIcon = document.getElementById('refresh-icon');
-            
             disableRefreshButton();
             refreshIcon.classList.add('animate-spin');
             
@@ -1318,102 +1319,75 @@
             // ✅ เพิ่มลงในรายการจุดที่กำลังถูกย้าย
             markersBeingMoved.add(rowKey);
             
-            // แสดงจุดชั่วคราว
-            const tempMarker = createCircleMarker(newLatLng, type);
-            tempMarker._popupData = {
-                ...data,
-                lat_long: newLatLngStr,
-                tempMarker: true,
-                tempMarkerId: `temp_${rowKey}`
-            };
-            setupMarkerPopup(tempMarker, tempMarker._popupData, type);
-            tempMarker.addTo(surveyLayers);
-            
-            // ✅ ซ่อนจุดจริงทั้งหมดที่มี _row_num เดียวกัน
+            // ✅ หาจุดจริงที่กำลังถูกย้าย (ไม่ใช่จุดชั่วคราว)
+            let realMarker = null;
             surveyLayers.eachLayer(layer => {
                 if (layer._popupData) {
                     const layerId = layer._popupData._row_num || layer._popupData.id;
-                    if (layerId === rowKey && !layer._popupData.tempMarker) {
-                        surveyLayers.removeLayer(layer);
+                    // ตรวจสอบว่าเป็นจุดจริง (ไม่ใช่จุดชั่วคราว) และมี _row_num เดียวกัน
+                    if (String(layerId) === String(rowKey) && !layer._popupData.tempMarker) {
+                        realMarker = layer;
                     }
                 }
             });
             
-            // ตรวจสอบสถานะออนไลน์
-            if (!isOnline || !navigator.onLine) {
-                const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
-                data.lat_long = newLatLngStr;
-                if (marker) marker._popupData.lat_long = newLatLngStr;
-                setupMarkerPopup(tempMarker, data, type);
+            if (!realMarker) {
+                console.warn(`⚠️ ไม่พบจุดจริงที่จะย้าย: ${rowKey}`);
+                markersBeingMoved.delete(rowKey);
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
-                
-                // ลบออกจากรายการ (เพราะยังไม่ได้อัปเดตจริง)
-                markersBeingMoved.delete(rowKey);
-                
-                console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
                 return;
             }
             
-            const body = new URLSearchParams();
-            body.append('action', 'updatePosition');
-            body.append('type', type);
-            body.append('rowKey', rowKey);
-            body.append('lat_long', newLatLngStr);
-            
             try {
-                const res = await fetch(CONFIG.SCRIPT_URL.trim(), { method: 'POST', body });
+                // ✅ อัปเดตตำแหน่งในข้อมูลทันที (ไม่ต้องโหลดข้อมูลใหม่ทั้งหมด)
+                realMarker._popupData.lat_long = newLatLngStr;
+                realMarker.setLatLng(newLatLng);
                 
-                if (res.ok) {
-                    // ✅ โหลดข้อมูลใหม่ (จุดจริงจะถูกสร้างทันที พร้อมจุดชั่วคราว)
-                    await loadExistingData();
+                // ✅ ส่งข้อมูลไปยังเซิร์ฟเวอร์
+                const body = new URLSearchParams();
+                body.append('action', 'updatePosition');
+                body.append('type', type);
+                body.append('rowKey', rowKey);
+                body.append('lat_long', newLatLngStr);
+                
+                const res = await fetch(CONFIG.SCRIPT_URL.trim(), {
+                    method: 'POST',
+                    body,
+                    timeout: 10000
+                });
+                
+                const result = await res.json();
+                
+                if (res.ok && result.status === 200) {
+                    // ✅ อัปเดตสำเร็จ - ลบออกจากรายการจุดที่กำลังถูกย้าย
+                    markersBeingMoved.delete(rowKey);
+                    refreshIcon.classList.remove('animate-spin');
+                    refreshBtn.classList.add('refresh-success');
                     
-                    // ⏱️ รอ 1 วินาที ให้แน่ใจว่าจุดจริงเรนเดอร์เสร็จแล้ว
                     setTimeout(() => {
-                        // ลบจุดชั่วคราว
-                        surveyLayers.eachLayer(layer => {
-                            if (layer._popupData && layer._popupData.tempMarkerId === `temp_${rowKey}`) {
-                                surveyLayers.removeLayer(layer);
-                            }
-                        });
-                        
-                        markersBeingMoved.delete(rowKey);
-                        
-                        refreshIcon.classList.remove('animate-spin');
-                        refreshBtn.classList.add('refresh-success');
-                        setTimeout(() => {
-                            refreshBtn.classList.remove('refresh-success');
-                            enableRefreshButton();
-                        }, 2000);
-                        
-                        showNotificationLeft('อัปเดตตำแหน่งสำเร็จ!', 'success');
-                    }, 5000); // รอ 1 วินาที
+                        refreshBtn.classList.remove('refresh-success');
+                        enableRefreshButton();
+                    }, 2000);
                     
+                    showNotificationLeft('อัปเดตตำแหน่งสำเร็จ!', 'success');
                 } else {
-                    throw new Error("อัปเดตตำแหน่งไม่สำเร็จ");
+                    throw new Error(result.message || "อัปเดตตำแหน่งไม่สำเร็จ");
                 }
             } catch (err) {
-                // หากเกิดข้อผิดพลาด ให้คืนค่าจุดเดิม
-                surveyLayers.removeLayer(tempMarker);
-                if (marker) {
-                    marker.setLatLng(L.latLng(oldLatLng.split(',').map(Number)));
-                    marker.addTo(surveyLayers);
-                }
+                // ✅ หากเกิดข้อผิดพลาด ให้คืนค่าจุดเดิม
+                console.error('❌ ข้อผิดพลาดในการอัปเดต:', err);
                 
+                // คืนค่าตำแหน่งเดิม
+                const coords = oldLatLng.split(',').map(Number);
+                realMarker.setLatLng(L.latLng(coords[0], coords[1]));
+                realMarker._popupData.lat_long = oldLatLng;
+                
+                markersBeingMoved.delete(rowKey);
                 refreshIcon.classList.remove('animate-spin');
                 enableRefreshButton();
                 
-                // ลบออกจากรายการ (เพราะล้มเหลว)
-                markersBeingMoved.delete(rowKey);
-                
-                console.error("Error updating position:", err);
-                
-                // หากเกิดข้อผิดพลาด ให้เก็บข้อมูลไว้ในคิวแทน
-                const queueId = addToSyncQueue('updatePosition', type, { lat_long: newLatLngStr }, rowKey);
-                data.lat_long = newLatLngStr;
-                if (marker) marker._popupData.lat_long = newLatLngStr;
-                setupMarkerPopup(marker, data, type);
-                console.log(`อัปเดตตำแหน่งไว้ในมือถือ (รอซิงค์): ${queueId}`);
+                showNotificationLeft("การอัปเดตล้มเหลว: " + err.message, 'error');
             }
         }
 
@@ -1422,37 +1396,41 @@
             const popupDiv = document.createElement('div');
             popupDiv.className = "p-1 min-w-[160px]";
             popupDiv.innerHTML = `
-            <p class="font-bold text-sm text-blue-900">${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'}</p>
-            <p class="text-[10px] text-gray-500">${data.lat_long}</p>
-            <div class="mt-2 space-y-2">  <!-- เพิ่มระยะห่างระหว่างปุ่ม -->
-                <button class="w-full bg-blue-600 text-white text-[11px] py-3 rounded font-bold shadow-sm active:bg-blue-700 hover:bg-blue-700 transition">แก้ข้อมูล</button>
-                <button class="w-full bg-red-600 text-white text-[11px] py-3 rounded font-bold shadow-sm active:bg-red-700 hover:bg-red-700 transition">ลบจุด</button>
-            </div>
-          `;
-          
-          // ✅ แก้ไขหลัก: ปิด autoPan + ไม่แพนแผนที่อัตโนมัติ
-          marker.bindPopup(popupDiv, {
-            minWidth: 190,
-            maxWidth: 220,
-            autoPan: false, // ✅ ปิดการแพนอัตโนมัติ (สำคัญมาก!)
-            closeOnClick: true // ใช้ค่าเริ่มต้น (ปิดเมื่อคลิกนอกป๊อปอัป)
-          });
-          
-          marker._popupData = { ...data, type: type };
-          
-          // ✅ ลบโค้ด setTimeout + panTo ทั้งหมดออก!
-          // เหลือเฉพาะการผูกปุ่ม
-        marker.on('popupopen', () => {
-            const buttons = marker.getPopup().getElement().querySelectorAll('button');
-            buttons[0].onclick = (e) => {
-                e.stopPropagation();
-                openEditPanel(marker._popupData, marker._popupData.type, marker); // ✅ แก้ไขตรงนี้
-            };
-            buttons[1].onclick = (e) => {
-                e.stopPropagation();
-                showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
-            };
-        });
+                <p class="font-bold text-sm text-blue-900">${type === 'building' ? 'สิ่งปลูกสร้าง' : 'ป้าย'}</p>
+                <p class="text-[10px] text-gray-500">${data.lat_long}</p>
+                <div class="mt-2 space-y-2">
+                    <button class="w-full bg-blue-600 text-white text-[11px] py-3 rounded font-bold shadow-sm active:bg-blue-700 hover:bg-blue-700 transition">แก้ข้อมูล</button>
+                    <button class="w-full bg-red-600 text-white text-[11px] py-3 rounded font-bold shadow-sm active:bg-red-700 hover:bg-red-700 transition">ลบจุด</button>
+                </div>
+            `;
+            
+            // ✅ ผูกป๊อปอัปให้มาร์กเกอร์ (สำคัญที่สุด!)
+            marker.bindPopup(popupDiv, {
+                minWidth: 190,
+                maxWidth: 220,
+                autoPan: false, // ปิดการแพนอัตโนมัติ
+                closeOnClick: true
+            });
+            
+            // เก็บข้อมูลไว้ในมาร์กเกอร์
+            marker._popupData = { ...data, type: type };
+            
+            // ✅ ผูกปุ่มเมื่อเปิดป๊อปอัป
+            marker.on('popupopen', () => {
+                const buttons = marker.getPopup().getElement().querySelectorAll('button');
+                if (buttons[0]) {
+                    buttons[0].onclick = (e) => {
+                        e.stopPropagation();
+                        openEditPanel(marker._popupData, marker._popupData.type, marker);
+                    };
+                }
+                if (buttons[1]) {
+                    buttons[1].onclick = (e) => {
+                        e.stopPropagation();
+                        showDeleteConfirm(marker, marker._popupData, marker._popupData.type);
+                    };
+                }
+            });
         }
 
         // ฟังก์ชันลบจุดและข้อมูลจาก Google Sheets (ข้อ 1)
@@ -1568,7 +1546,7 @@
                 { id: 'b_use', label: 'ใช้ประโยชน์', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักกรณีไม่ได้เป็นเจ้าของกรรมสิทธิ์ที่ดิน)', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น กรณีให้เช่าอยู่อาศัย หรือแบ่งพื้นที่ให้เช่าอยู่อาศัย', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย)', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-green' },
                 { id: 'per_use', label: 'การเช่า', type: 'select', options: ['ใช้ประโยชน์เอง', 'ให้เช่า', 'ผู้อื่นใช้'], customClass: 'bg-custom-green' },
                 { id: 'full_area', label: 'ใช้ทั้งหลัง', type: 'select', options: ['', 'เต็มพื้นที่', 'บางส่วน'], customClass: 'bg-custom-green' },
-                { id: 'buse_floor', label: 'ชั้นที่ใช้', type: 'select', options: ['1-1', '1-2', '1-3', '1-4', '1-5'], allowCustom: true, defaultValue: '1-1', customClass: 'bg-custom-green' },
+                { id: 'buse_floor', label: 'ชั้นที่ใช้', type: 'select', options: ['1-1', '1-2', '1-3', '1-4', '1-5'], allowCustom: true, customClass: 'bg-custom-green' },
                 { id: 'buse_area', label: 'พื้นที่ใช้ (ตร.ม.)', type: 'number', customClass: 'bg-custom-green' },
                 { id: 'ment_use', label: 'รายละเอียด', type: 'select', options: ['ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true, customClass: 'bg-custom-green' },
                 
@@ -1579,7 +1557,7 @@
                 { id: 'buse_area2', label: 'พื้นที่ใช้ (2) (ตร.ม.)', type: 'number', customClass: 'bg-custom-pink' },
                 { id: 'ment_use2', label: 'รายละเอียด (2)', type: 'select', options: ['ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true, customClass: 'bg-custom-pink' },
                 { id: 'full_area2', label: 'ใช้ทั้งหลัง (2)', type: 'select', options: ['', 'บางส่วน'], customClass: 'bg-custom-pink' },
-                
+                { id: 'land_use', label: 'ใช้ประโยชน์ที่ดิน', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักกรณีไม่ได้เป็นเจ้าของกรรมสิทธิ์ที่ดิน)', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น กรณีให้เช่าอยู่อาศัย หรือแบ่งพื้นที่ให้เช่าอยู่อาศัย', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย)', '4-ทิ้งไว้ว่างเปล่า/รกร้าง', '5-ใช้ประโยชน์หลายประเภท'], customClass: 'bg-custom-green' },
                 // ✅ สถานะการตรวจสอบ - สีเขียว
                 { id: 'check', label: 'สถานะการตรวจสอบ', type: 'select', options: ['ยังไม่สำรวจ', 'ถ่ายรูปแล้ว', 'ตรวจสอบแล้ว'], customClass: 'bg-custom-check-status' }
             ];
@@ -2523,7 +2501,6 @@
             const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
             setupMarkerPopup(m, r, 'building');
             m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
           });
           
           allSigns.forEach(r => {
@@ -2533,100 +2510,69 @@
             const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
             setupMarkerPopup(m, r, 'sign');
             m.addTo(surveyLayers);
-            if (isEditMode) enableMarkerDragging(m, r);
           });
         }
 
-        /**
-         * อัปเดตมาร์กเกอร์เฉพาะในมุมมองปัจจุบัน (สำหรับข้อมูลจำนวนมาก)
-         */
+        // ============================================
+        // อัปเดตมาร์กเกอร์เฉพาะในมุมมอง (GPU Optimized)
+        // ============================================
         function updateVisibleMarkers() {
-            // เก็บจุดชั่วคราวทั้งหมดก่อนล้าง
-            const ยังไม่สำรวจMarkers = [];
-            surveyLayers.eachLayer(layer => {
-                if (layer._popupData) {
-                    if (layer._popupData.queued || layer._popupData.tempMarker) {
-                        ยังไม่สำรวจMarkers.push({
-                            latlng: layer.getLatLng(),
-                            data: layer._popupData,
-                            type: layer._popupData.type
-                        });
-                    }
-                }
-            });
-            
-            surveyLayers.clearLayers();
-            const bounds = map.getBounds();
-            
-            // แสดงเฉพาะสิ่งปลูกสร้างในมุมมอง
-            allBuildings.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const latLng = L.latLng(coords[0], coords[1]);
-                if (!bounds.contains(latLng)) return;
+            // ✅ ใช้ requestAnimationFrame สำหรับการเรนเดอร์แบบประสิทธิภาพสูง
+            requestAnimationFrame(() => {
+                const bounds = map.getBounds();
+                const zoom = map.getZoom();
+                const bufferRatio = isMobile() ? 1.3 : 1.5; // ลดบัฟเฟอร์สำหรับมือถือ
+                const bufferedBounds = bounds.pad(bufferRatio);
                 
-                // ✅ แก้ตรงนี้: ใช้ทั้ง _row_num และ id
-                const recordKey = r._row_num || r.id;
-                if (markersBeingMoved.has(recordKey)) {
-                    return; // ข้ามการสร้างจุดจริง
-                }
+                // ✅ ล้างมาร์กเกอร์ทั้งหมดในครั้งเดียว (แทนทีละตัว)
+                surveyLayers.clearLayers();
                 
-                const m = createCircleMarker(latLng, 'building', isEditMode);
-                setupMarkerPopup(m, r, 'building');
-                m.addTo(surveyLayers);
-                if (isEditMode) enableMarkerDragging(m, r);
-            });
-            
-            // แสดงเฉพาะป้ายในมุมมอง
-            allSigns.forEach(r => {
-                if (!r.lat_long) return;
-                const coords = r.lat_long.split(',').map(Number);
-                if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                const latLng = L.latLng(coords[0], coords[1]);
-                if (!bounds.contains(latLng)) return;
+                // ✅ สร้างมาร์กเกอร์แบบแบตช์
+                const markersToRender = [];
                 
-                // ✅ ตรวจสอบว่าจุดนี้กำลังถูกย้ายหรือไม่
-                const recordKey = r._row_num || r.id; // ✅ เพิ่มบรรทัดนี้
-                if (markersBeingMoved.has(recordKey)) { // ✅ แก้เป็น recordKey
-                    return;
-                }
+                // จุดสิ่งปลูกสร้าง
+                allBuildings.forEach(r => {
+                    if (!r.lat_long) return;
+                    const coords = r.lat_long.split(',').map(Number);
+                    if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                    
+                    const latLng = L.latLng(coords[0], coords[1]);
+                    if (!bufferedBounds.contains(latLng)) return;
+                    
+                    // ✅ ข้ามจุดที่กำลังถูกย้าย
+                    const recordKey = r._row_num || r.id;
+                    if (markersBeingMoved.has(recordKey)) return;
+                    
+                    markersToRender.push({ latLng, data: r, type: 'building' });
+                });
                 
-                const m = createCircleMarker(latLng, 'sign', isEditMode);
-                setupMarkerPopup(m, r, 'sign');
-                m.addTo(surveyLayers);
-                if (isEditMode) enableMarkerDragging(m, r);
-            });
-            
-            // เพิ่มจุดชั่วคราวกลับเข้ามา
-            ยังไม่สำรวจMarkers.forEach(marker => {
-                const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
-                m._popupData = marker.data;
-                setupMarkerPopup(m, marker.data, marker.type);
-                m.addTo(surveyLayers);
-                if (isEditMode) enableMarkerDragging(m, marker.data);
+                // จุดป้าย
+                allSigns.forEach(r => {
+                    if (!r.lat_long) return;
+                    const coords = r.lat_long.split(',').map(Number);
+                    if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+                    
+                    const latLng = L.latLng(coords[0], coords[1]);
+                    if (!bufferedBounds.contains(latLng)) return;
+                    
+                    const recordKey = r._row_num || r.id;
+                    if (markersBeingMoved.has(recordKey)) return;
+                    
+                    markersToRender.push({ latLng, data: r, type: 'sign' });
+                });
+                
+                // ✅ เรนเดอร์ทั้งหมดในครั้งเดียว
+                markersToRender.forEach(item => {
+                    const m = createCircleMarker(item.latLng, item.type, isEditMode);
+                    m._popupData = item.data;
+                    m.addTo(surveyLayers);
+                });
+                
+                console.log(`✅ เรนเดอร์มาร์กเกอร์ ${markersToRender.length} จุดด้วย GPU (Canvas)`);
             });
         }
 
-        // เปิดใช้งานการลากมาร์กเกอร์ในโหมดแก้ไข
-        function enableMarkerDragging(marker, data) {
-            // ✅ ตรวจสอบว่ามีเมธอดที่จำเป็นก่อนเรียกใช้
-            if (!isEditMode || !marker || !marker.on || !marker.off) return;
-            
-            if (marker.dragging?.enable) {
-                marker.dragging.enable();
-            }
-            
-            marker.off('dragend');
-            marker.on('dragend', async function(e) {
-                const newLatLng = e.target.getLatLng();
-                const marker = e.target;
-                const data = marker._popupData;
-                if (data) {
-                    await updateMarkerPosition(marker, data, newLatLng);
-                }
-            });
-        }
+
 
         // ฟังก์ชันสร้างแถวข้อมูลป้าย
         function renderSignTable() {
@@ -2671,10 +2617,10 @@
                 const res = await fetch(`${CONFIG.SCRIPT_URL}?action=getData`);
                 const data = await res.json();
                 
-                // เก็บจุดชั่วคราวทั้งหมดก่อนล้าง
+                // ✅ เก็บเฉพาะจุดชั่วคราวที่ไม่ใช่จุดที่กำลังถูกย้าย
                 const tempMarkers = [];
                 surveyLayers.eachLayer(layer => {
-                    if (layer._popupData && layer._popupData.tempMarker) {
+                    if (layer._popupData && layer._popupData.tempMarker && !layer._popupData.beingMoved) {
                         tempMarkers.push({
                             latlng: layer.getLatLng(),
                             data: layer._popupData,
@@ -2701,43 +2647,52 @@
                     map.off('zoomend', updateVisibleMarkers);
                     map.on('moveend', updateVisibleMarkers);
                     map.on('zoomend', updateVisibleMarkers);
-                    updateVisibleMarkers(); // ✅ ฟังก์ชันนี้ยังมีการตรวจสอบ markersBeingMoved (สำหรับการเลื่อนแผนที่ระหว่างย้าย)
+                    updateVisibleMarkers();
                 } else {
-                    // ✅ สร้างจุดจริงทั้งหมดโดยไม่ตรวจสอบ markersBeingMoved
+                    // ✅ สร้างจุดจริงทั้งหมด
                     allBuildings.forEach(r => {
                         if (!r.lat_long) return;
                         const coords = r.lat_long.split(',').map(Number);
                         if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                        // ❌ ลบบรรทัดนี้ออกทั้งหมด:
-                        // if (markersBeingMoved.has(r._row_num)) return;
+                        
+                        // ✅ ข้ามจุดที่กำลังถูกย้าย
+                        const recordKey = r._row_num || r.id;
+                        if (markersBeingMoved.has(String(recordKey))) {
+                            return;
+                        }
+                        
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+                        m._popupData = r;
                         setupMarkerPopup(m, r, 'building');
                         m.addTo(surveyLayers);
-                        if (isEditMode) enableMarkerDragging(m, r);
                     });
                     
                     allSigns.forEach(r => {
                         if (!r.lat_long) return;
                         const coords = r.lat_long.split(',').map(Number);
                         if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-                        // ❌ ลบบรรทัดนี้ออกทั้งหมด:
-                        // if (markersBeingMoved.has(r._row_num)) return;
+                        
+                        // ✅ ข้ามจุดที่กำลังถูกย้าย
+                        const recordKey = r._row_num || r.id;
+                        if (markersBeingMoved.has(String(recordKey))) {
+                            return;
+                        }
+                        
                         const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+                        m._popupData = r;
                         setupMarkerPopup(m, r, 'sign');
                         m.addTo(surveyLayers);
-                        if (isEditMode) enableMarkerDragging(m, r);
                     });
                 }
                 
-                // ✅ เพิ่มจุดชั่วคราวกลับเข้ามา (จะมีทั้งจุดจริงและจุดชั่วคราวชั่วคราว 300ms)
+                // ✅ เพิ่มจุดชั่วคราวกลับเข้ามา
                 tempMarkers.forEach(marker => {
                     const m = createCircleMarker(marker.latlng, marker.type, isEditMode);
                     m._popupData = marker.data;
                     setupMarkerPopup(m, marker.data, marker.type);
                     m.addTo(surveyLayers);
-                    if (isEditMode) enableMarkerDragging(m, marker.data);
                 });
-            } catch(e) {
+            } catch (e) {
                 console.error("Error loading data:", e);
             }
         }
@@ -3768,19 +3723,31 @@
         // เมื่อสร้างมาร์กเกอร์ใหม่
         function createCircleMarker(latlng, type, isDraggable = false) {
             const className = type === 'building' ? 'circle-building' : 'circle-sign';
+            
             const icon = L.divIcon({
                 className: `circle-marker ${className}`,
                 iconSize: [14, 14],
                 iconAnchor: [7, 7]
             });
+            
             const marker = L.marker(latlng, {
                 icon: icon,
-                draggable: isDraggable, // ✅ ตั้งค่าให้ลากได้
+                draggable: isDraggable,
                 zIndexOffset: 1000
             });
             
-            // เก็บข้อมูลไว้ในมาร์กเกอร์
-            marker._popupData = null;
+            // ✅ ไม่ต้องผูกคลิกที่นี่ - Leaflet จะจัดการอัตโนมัติเมื่อใช้ bindPopup
+            
+            // ✅ ผูกเหตุการณ์ลากเฉพาะเมื่อเป็นโหมดแก้ไข
+            if (isDraggable) {
+                marker.on('dragend', async function(e) {
+                    const newLatLng = e.target.getLatLng();
+                    const data = e.target._popupData;
+                    if (data) {
+                        await updateMarkerPosition(e.target, data, newLatLng);
+                    }
+                });
+            }
             
             return marker;
         }
@@ -3884,7 +3851,7 @@
             }
             
             const bounds = map.getBounds();
-            const bufferRatio = isMobile() ? 0.5 : 1.0;
+            const bufferRatio = isMobile() ? 1.5 : 2.0;
             const bufferedBounds = bounds.pad(bufferRatio);
             
             // ล้างมาร์กเกอร์ทั้งหมด
@@ -3910,7 +3877,6 @@
                 
                 const m = createCircleMarker(latLng, 'building', isEditMode);
                 setupMarkerPopup(m, r, 'building');
-                if (isEditMode) enableMarkerDragging(m, r);
                 if (markerCluster) {
                     markerCluster.addLayer(m);
                 } else {
@@ -3933,7 +3899,6 @@
                 
                 const m = createCircleMarker(latLng, 'sign', isEditMode);
                 setupMarkerPopup(m, r, 'sign');
-                if (isEditMode) enableMarkerDragging(m, r);
                 if (markerCluster) {
                     markerCluster.addLayer(m);
                 } else {
@@ -3979,27 +3944,47 @@
         }
 
         // ============================================
-        // 2. วาง beforeunload ที่ระดับบนสุด (นอก window.load)
+        // 1. วางก่อน `window.addEventListener('load')` ทั้งหมด
         // ============================================
+
+        // หยุดระบบอัปเดตเมื่อปิดหน้าต่าง
         window.addEventListener('beforeunload', () => {
-            stopRealtimeAutoUpdate(); // ✅ หยุดระบบใหม่
+            stopRealtimeAutoUpdate();
+        });
+
+        // ตรวจจับการเชื่อมต่อออนไลน์
+        window.addEventListener('online', () => {
+            isOnline = true;
+            updateConnectionStatus();
+            // เมื่อกลับมาออนไลน์ ให้พยายามส่งข้อมูลที่ค้างอยู่
+            setTimeout(processSyncQueue, 1000);
+        });
+
+        // ตรวจจับการออฟไลน์
+        window.addEventListener('offline', () => {
+            isOnline = false;
+            updateConnectionStatus();
         });
 
         // ============================================
-        // 3. เริ่มต้นแอป (วางด้านล่าง beforeunload)
+        // 2. เริ่มต้นแอป (มีเพียง 1 ครั้งเดียว)
         // ============================================
         window.addEventListener('load', async () => {
+            // 1. เริ่มต้นแผนที่และไอคอน
             initMap();
             lucide.createIcons();
             
-            // ✅ เพิ่ม await และเริ่มระบบอัปเดต
-            await loadExistingData(); // ← เพิ่ม await
-            startRealtimeAutoUpdate(); // ← เพิ่มบรรทัดนี้ (สำคัญที่สุด!)
+            // 2. โหลดข้อมูลและเริ่มระบบอัปเดต
+            await loadExistingData();           // ← โหลดข้อมูลครั้งแรก
+            startRealtimeAutoUpdate();          // ← เริ่มระบบอัปเดตอัตโนมัติ (สำคัญที่สุด!)
             
+            // 3. ตรวจสอบและซิงค์ข้อมูลที่ค้างอยู่
             await checkAndSyncOnStartup();
+            
+            // 4. อัปเดตจุดแจ้งเตือนจำนวนข้อมูลที่รอซิงค์
             setInterval(updateSyncBadge, 1000);
             
-            // ลงทะเบียน Service Worker
+            // 5. ลงทะเบียน Service Worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js')
                     .then(registration => console.log('Service Worker registered:', registration.scope))

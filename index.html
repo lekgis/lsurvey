@@ -20,7 +20,7 @@
     <!-- เพิ่มในส่วน <head> ของไฟล์ HTML -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
         #map { height: 100vh; width: 100vw; z-index: 0; }
@@ -278,8 +278,8 @@
             border: 2px solid white;
             cursor: pointer;
         }
-        .circle-building { background-color: #f97316; }
-        .circle-sign { background-color: #22c55e; }
+        .circle-building { background-color: #f59e0b; }
+        .circle-sign { background-color: #4ade80; }
         
         .user-location-dot {
             width: 14px; height: 14px;
@@ -656,17 +656,15 @@
         let isUpdating = false;
         let isUploadingImage = false; // [cite: 71]
 
-        let canvasRenderer; // ✅ ประกาศตัวแปรระดับโกลบอล
-
         function initMap() {
-            // ✅ สร้าง Canvas Renderer 1 ครั้ง
-            canvasRenderer = L.canvas({ padding: 0.5 });
+            // ✅ ใช้ Canvas Renderer เป็นค่าเริ่มต้น
+            const canvasRenderer = L.canvas({ padding: 0.5 });
             
             const mapOptions = {
                 zoomControl: false,
                 attributionControl: false,
                 preferCanvas: true,
-                renderer: canvasRenderer, // ✅ ใช้ renderer เดียวกัน
+                renderer: canvasRenderer, // ✅ สำคัญมาก!
                 zoomSnap: isMobile() ? 0.5 : 1,
                 wheelDebounceTime: 40,
                 doubleClickZoom: false
@@ -3757,30 +3755,20 @@
 
         // เมื่อสร้างมาร์กเกอร์ใหม่
         function createCircleMarker(latlng, type, isDraggable = false) {
-            // ✅ ใช้ขนาดและสีเดิมตามที่กำหนดใน CSS เดิม
-            const options = {
-                renderer: canvasRenderer, // ✅ ใช้ตัวแปรระดับโกลบอล
-                radius: 6, // ✅ 14px เส้นผ่านศูนย์กลาง = radius 7
-                fillColor: type === 'building' ? '#f97316' : '#22c55e', // ✅ สีเดิม
-                color: '#ffffff', // ✅ เส้นขอบขาว
-                weight: 2, // ✅ ความหนาเส้นขอบ 2px
-                opacity: 1,
-                fillOpacity: 1, // ✅ ความทึบแสงเต็มที่
-                draggable: isDraggable,
-                bubblingMouseEvents: false
-            };
-            
-            const marker = L.circleMarker(latlng, options);
-            
-            // ผูกเหตุการณ์คลิกเหมือนเดิม
-            marker.on('click', function(e) {
-                if (activeTool) return;
-                const marker = e.target;
-                if (marker._popupData) {
-                    setupMarkerPopup(marker, marker._popupData, type);
-                    marker.openPopup();
-                }
+            const className = type === 'building' ? 'circle-building' : 'circle-sign';
+            const icon = L.divIcon({
+                className: `circle-marker ${className}`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
             });
+            const marker = L.marker(latlng, {
+                icon: icon,
+                draggable: isDraggable, // ✅ ตั้งค่าให้ลากได้
+                zIndexOffset: 1000
+            });
+            
+            // เก็บข้อมูลไว้ในมาร์กเกอร์
+            marker._popupData = null;
             
             return marker;
         }

@@ -598,16 +598,23 @@
                             <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
                             <th>รหัส</th>
                             <th>เจ้าของ</th>
-                            <th>ที่อยู่</th>
+                            <th class="text-center">เลขที่</th>
+                            <th class="text-center">หมู่</th>
                             <th>ประเภท</th>
-                            <th>พื้นที่ (ตร.ม.)</th>
+                            <th class="text-center">วัสดุ</th>
+                            <th class="text-center">พื้นที่ทั้งหลัง</th>
+                            <th class="text-center">อายุ</th>
+                            <th>รายละเอียด</th>
+                            <th>ใช้ประโยชน์</th>
+                            <th>ใช้ประโยชน์(2)</th>
+                            <th>ใช้ประโยชน์ที่ดิน</th>
                             <th>ตรวจสอบ</th>
                             <th style="width: 60px">ซูม</th>
                         </tr>
                     </thead>
                     <tbody id="building-table-body">
                         <tr>
-                            <td colspan="8" class="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</td>
+                            <td colspan="15" class="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -2128,36 +2135,64 @@
         // ฟังก์ชันสร้างแถวข้อมูลสิ่งปลูกสร้าง
         function renderBuildingTable() {
             const tbody = document.getElementById('building-table-body');
-            if (allBuildings.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">ไม่มีข้อมูลสิ่งปลูกสร้าง</td></tr>';
+            
+            if (!allBuildings || allBuildings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-gray-500">ไม่มีข้อมูลสิ่งปลูกสร้าง</td></tr>';
                 return;
             }
-            tbody.innerHTML = allBuildings.map((building, index) => {
+            
+            // ✅ เรียงข้อมูลตาม ID (เรียงจากน้อยไปมากตามลำดับอักขระ)
+            const sortedBuildings = [...allBuildings].sort((a, b) => {
+                const idA = (a.id || '').toString();
+                const idB = (b.id || '').toString();
+                return idA.localeCompare(idB, 'th', { numeric: true, sensitivity: 'base' });
+            });
+            
+            tbody.innerHTML = sortedBuildings.map(building => {
                 if (!building.lat_long) return '';
-                const [lat, lng] = building.lat_long.split(',').map(Number);
                 
-                // ✅ แก้ไขให้แสดงสถานะตรงกับข้อมูลจริง
-                const statusClass = building.check === 'ถ่ายรูปแล้ว' ? 'status-ถ่ายรูปแล้ว' :
-                                   building.check === 'ตรวจสอบแล้ว' ? 'status-ตรวจสอบแล้ว' : 'status-ยังไม่สำรวจ';
-                const statusText = building.check || 'ยังไม่สำรวจ'; // ✅ แสดงค่าจริงจากข้อมูล
+                const [lat, lng] = building.lat_long.split(',').map(Number);
+                if (isNaN(lat) || isNaN(lng)) return '';
+                
+                // ✅ กำหนดสีสถานะการตรวจสอบ
+                let statusClass = 'status-ยังไม่สำรวจ';
+                let statusText = building.check || 'ยังไม่สำรวจ';
+                
+                if (building.check === 'ถ่ายรูปแล้ว') {
+                    statusClass = 'status-ถ่ายรูปแล้ว';
+                } else if (building.check === 'ตรวจสอบแล้ว') {
+                    statusClass = 'status-ตรวจสอบแล้ว';
+                }
+                
+                // ✅ ฟังก์ชันช่วยแสดงค่า (ถ้าไม่มีให้แสดง "-")
+                const displayValue = (val) => val && val.toString().trim() !== '' ? val : '-';
                 
                 return `
-                <tr>
-                    <td><span class="marker-icon marker-building"></span></td>
-                    <td class="font-medium">${building.building_c || '-'}</td>
-                    <td>${building.full_name || '-'}</td>
-                    <td>${building.address || '-'}</td>
-                    <td>${building.b_type || '-'}</td>
-                    <td>${building.b_area || '-'}</td>
-                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td>
-                        <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
-                            <i data-lucide="locate" class="w-3 h-3 inline"></i>
-                        </button>
-                    </td>
-                </tr>
+                    <tr>
+                        <td><span class="marker-icon marker-building"></span></td>
+                        <td class="font-medium">${displayValue(building.building_c)}</td>
+                        <td>${displayValue(building.full_name)}</td>
+                        <td class="text-center">${displayValue(building.hs_no)}</td>
+                        <td class="text-center">${displayValue(building.hs_moo)}</td>
+                        <td>${displayValue(building.b_type)}</td>
+                        <td class="text-center">${displayValue(building.b_mat)}</td>
+                        <td class="text-center">${displayValue(building.b_area)}</td>
+                        <td class="text-center">${displayValue(building.b_year)}</td>
+                        <td>${displayValue(building.b_note)}</td>
+                        <td>${displayValue(building.b_use)}</td>
+                        <td>${displayValue(building.b_use2)}</td>
+                        <td>${displayValue(building.land_use)}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <button class="zoom-btn" onclick="zoomToLocation(L.latLng(${lat}, ${lng}))">
+                                <i data-lucide="locate" class="w-3 h-3 inline"></i>
+                            </button>
+                        </td>
+                    </tr>
                 `;
             }).join('');
+            
+            // ✅ สร้างไอคอนหลังเรนเดอร์ตารางเสร็จ
             lucide.createIcons();
         }
         // ============================================

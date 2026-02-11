@@ -596,19 +596,19 @@
                     <thead>
                         <tr>
                             <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
-                            <th>รหัส</th>
-                            <th>เจ้าของ</th>
-                            <th class="text-center">เลขที่</th>
-                            <th class="text-center">หมู่</th>
-                            <th>ประเภท</th>
-                            <th class="text-center">วัสดุ</th>
-                            <th class="text-center">พื้นที่ทั้งหลัง</th>
-                            <th class="text-center">อายุ</th>
-                            <th>รายละเอียด</th>
-                            <th>ใช้ประโยชน์</th>
-                            <th>ใช้ประโยชน์(2)</th>
-                            <th>ใช้ประโยชน์ที่ดิน</th>
-                            <th>ตรวจสอบ</th>
+                            <th class="sortable-header" data-sort="building_c">รหัส</th>
+                            <th class="sortable-header" data-sort="full_name">เจ้าของ</th>
+                            <th class="text-center sortable-header" data-sort="hs_no">เลขที่</th>
+                            <th class="text-center sortable-header" data-sort="hs_moo">หมู่</th>
+                            <th class="sortable-header" data-sort="b_type">ประเภท</th>
+                            <th class="text-center sortable-header" data-sort="b_mat">วัสดุ</th>
+                            <th class="text-center sortable-header" data-sort="b_area">พื้นที่ทั้งหลัง (ตร.ม.)</th>
+                            <th class="text-center sortable-header" data-sort="b_year">อายุ</th>
+                            <th class="sortable-header" data-sort="b_note">รายละเอียด</th>
+                            <th class="sortable-header" data-sort="b_use">ใช้ประโยชน์</th>
+                            <th class="sortable-header" data-sort="b_use2">ใช้ประโยชน์ (2)</th>
+                            <th class="sortable-header" data-sort="land_use">ใช้ประโยชน์ที่ดิน</th>
+                            <th class="sortable-header" data-sort="check">ตรวจสอบ</th>
                             <th style="width: 60px">ซูม</th>
                         </tr>
                     </thead>
@@ -624,13 +624,13 @@
                     <thead>
                         <tr>
                             <th style="width: 30px"><i data-lucide="map-pin" class="w-4 h-4"></i></th>
-                            <th>รหัส</th>
-                            <th class="text-center">ลักษณะ</th>
-                            <th class="text-center">กว้าง (ซ.ม.)</th>
-                            <th class="text-center">ยาว (ซ.ม.)</th>
-                            <th class="text-center">จำนวนด้าน</th>
-                            <th>ข้อความ</th>
-                            <th class="text-center">ตรวจสอบ</th>
+                            <th class="sortable-header" data-sort="s_code">รหัส</th>
+                            <th class="sortable-header" data-sort="s_characte">ลักษณะ</th>
+                            <th class="text-center sortable-header" data-sort="s_wide">กว้าง (ซ.ม.)</th>
+                            <th class="text-center sortable-header" data-sort="s_length">ยาว (ซ.ม.)</th>
+                            <th class="text-center sortable-header" data-sort="no_side">จำนวนด้าน</th>
+                            <th class="sortable-header" data-sort="s_text">ข้อความ</th>
+                            <th class="sortable-header" data-sort="check">ตรวจสอบ</th>
                             <th style="width: 60px">ซูม</th>
                         </tr>
                     </thead>
@@ -2142,12 +2142,8 @@
             }
             
             // ✅ เรียงข้อมูลตาม ID (เรียงจากน้อยไปมากตามลำดับอักขระ)
-            const sortedBuildings = [...allBuildings].sort((a, b) => {
-                const idA = (a.id || '').toString();
-                const idB = (b.id || '').toString();
-                return idA.localeCompare(idB, 'th', { numeric: true, sensitivity: 'base' });
-            });
-            
+            const sortedBuildings = sortBuildings(allBuildings, buildingSortColumn, buildingSortDirection);
+
             tbody.innerHTML = sortedBuildings.map(building => {
                 if (!building.lat_long) return '';
                 
@@ -2869,19 +2865,20 @@
             });
         }
 
-
-
         // ฟังก์ชันสร้างแถวข้อมูลป้าย
         function renderSignTable() {
             const tbody = document.getElementById('sign-table-body');
-            if (allSigns.length === 0) {
+            if (!allSigns || allSigns.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">ไม่มีข้อมูลป้าย</td></tr>';
                 return;
             }
             // ในฟังก์ชัน renderSignTable() แก้ไขส่วนสร้างแถว:
-            tbody.innerHTML = allSigns.map((sign, index) => {
+            const sortedSigns = sortSigns(allSigns, signSortColumn, signSortDirection);
+
+            tbody.innerHTML = sortedSigns.map(sign => {
                 if (!sign.lat_long) return '';
                 const [lat, lng] = sign.lat_long.split(',').map(Number);
+                if (isNaN(lat) || isNaN(lng)) return '';
                 
                 // ✅ แสดงสถานะตรวจสอบให้ตรงกับข้อมูลจริง
                 const statusClass = sign.check === 'ถ่ายรูปแล้ว' ? 'status-ถ่ายรูปแล้ว' :
@@ -2908,6 +2905,130 @@
             }).join('');
             lucide.createIcons();
         }
+
+        // ============================================
+        // สถานะการเรียงลำดับ (เริ่มต้นเรียงตามรหัส)
+        // ============================================
+        let buildingSortColumn = 'building_c';
+        let buildingSortDirection = 'asc'; // 'asc' หรือ 'desc'
+        let signSortColumn = 's_code';
+        let signSortDirection = 'asc';
+
+        // คอลั่มน์ที่เป็นตัวเลข (สำหรับการเรียงแบบตัวเลข)
+        const buildingNumericColumns = ['b_area', 'b_year', 'hs_no', 'hs_moo', 'no_floor', 'buse_area', 'buse_area2'];
+        const signNumericColumns = ['s_wide', 's_length', 'no_side'];
+
+        // ============================================
+        // ฟังก์ชันอัปเดตสัญลักษณ์เรียงลำดับในหัวตาราง
+        // ============================================
+        function updateSortIndicators(tableId, sortColumn, sortDirection) {
+            // ลบสัญลักษณ์เก่าทั้งหมด
+            document.querySelectorAll(`#${tableId} .sort-indicator`).forEach(el => el.remove());
+            
+            // เพิ่มสัญลักษณ์ใหม่ในคอลั่มน์ที่เรียง
+            const header = document.querySelector(`#${tableId} th.sortable-header[data-sort="${sortColumn}"]`);
+            if (header) {
+                const indicator = document.createElement('span');
+                indicator.className = 'sort-indicator ml-1 text-blue-600 font-bold';
+                indicator.innerHTML = sortDirection === 'asc' ? '↑' : '↓';
+                header.appendChild(indicator);
+            }
+        }
+
+        // ============================================
+        // ฟังก์ชันเรียงข้อมูลสิ่งปลูกสร้าง
+        // ============================================
+        function sortBuildings(data, column, direction) {
+            return [...data].sort((a, b) => {
+                let valA = a[column] || '';
+                let valB = b[column] || '';
+                
+                // จัดการค่าตัวเลข
+                if (buildingNumericColumns.includes(column)) {
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return direction === 'asc' ? valA - valB : valB - valA;
+                }
+                
+                // จัดการข้อความ (รองรับภาษาไทย)
+                if (typeof valA === 'string' && typeof valB === 'string') {
+                    const result = valA.localeCompare(valB, 'th', { numeric: true, sensitivity: 'base' });
+                    return direction === 'asc' ? result : -result;
+                }
+                
+                // Fallback
+                return direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+            });
+        }
+
+        // ============================================
+        // ฟังก์ชันเรียงข้อมูลป้าย
+        // ============================================
+        function sortSigns(data, column, direction) {
+            return [...data].sort((a, b) => {
+                let valA = a[column] || '';
+                let valB = b[column] || '';
+                
+                // จัดการค่าตัวเลข
+                if (signNumericColumns.includes(column)) {
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return direction === 'asc' ? valA - valB : valB - valA;
+                }
+                
+                // จัดการข้อความ (รองรับภาษาไทย)
+                if (typeof valA === 'string' && typeof valB === 'string') {
+                    const result = valA.localeCompare(valB, 'th', { numeric: true, sensitivity: 'base' });
+                    return direction === 'asc' ? result : -result;
+                }
+                
+                // Fallback
+                return direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+            });
+        }
+
+        // ============================================
+        // ผูกเหตุการณ์คลิกหัวตารางเมื่อโหลดหน้าเว็บ
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // ผูกเหตุการณ์กับหัวตารางสิ่งปลูกสร้าง
+            document.querySelectorAll('#building-table .sortable-header').forEach(header => {
+                header.style.cursor = 'pointer';
+                header.style.userSelect = 'none';
+                header.addEventListener('click', () => {
+                    const column = header.dataset.sort;
+                    if (buildingSortColumn === column) {
+                        buildingSortDirection = buildingSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        buildingSortColumn = column;
+                        buildingSortDirection = 'asc';
+                    }
+                    updateSortIndicators('building-table', buildingSortColumn, buildingSortDirection);
+                    renderBuildingTable(); // เรนเดอร์ใหม่ด้วยการเรียงลำดับใหม่
+                });
+            });
+            
+            // ผูกเหตุการณ์กับหัวตารางป้าย
+            document.querySelectorAll('#sign-table .sortable-header').forEach(header => {
+                header.style.cursor = 'pointer';
+                header.style.userSelect = 'none';
+                header.addEventListener('click', () => {
+                    const column = header.dataset.sort;
+                    if (signSortColumn === column) {
+                        signSortDirection = signSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        signSortColumn = column;
+                        signSortDirection = 'asc';
+                    }
+                    updateSortIndicators('sign-table', signSortColumn, signSortDirection);
+                    renderSignTable(); // เรนเดอร์ใหม่ด้วยการเรียงลำดับใหม่
+                });
+            });
+            
+            // ตั้งค่าเริ่มต้น
+            updateSortIndicators('building-table', buildingSortColumn, buildingSortDirection);
+            updateSortIndicators('sign-table', signSortColumn, signSortDirection);
+        });
 
         async function loadExistingData() {
             try {

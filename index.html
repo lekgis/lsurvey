@@ -193,12 +193,33 @@
         .leaflet-zoom-anim .crosshair {
           display: none !important;
         }
-        /* สำหรับมือถือ: ความเร็วแอนิเมชันปรับให้เหมาะสม */
+        /* ============================================
+           ปรับแต่งสำหรับมือถือ (รวมทุกกฎไว้ในบล็อกเดียว)
+           ============================================ */
         @media (max-width: 768px) {
-          #crosshair,
-          #add-trigger-container {
-            transition-duration: 0.35s;
-          }
+            /* ความเร็วแอนิเมชัน */
+            #crosshair,
+            #add-trigger-container {
+                transition-duration: 0.35s;
+            }
+            
+            /* ขนาดตัวอักษรและพื้นที่ในช่องกรอก */
+            .side-panel .form-input {
+                font-size: 0.8125rem !important; /* 13px */
+                padding: 0.4rem 0.6rem !important;
+            }
+            
+            /* ปรับขนาดเลเบลให้สมดุล */
+            .side-panel .form-label {
+                font-size: 0.8125rem !important;
+                margin-bottom: 0.2rem !important;
+            }
+            
+            /* ปรับขนาดปุ่มกล้อง */
+            .side-panel button[onclick*="camera"] {
+                padding: 0.5rem !important;
+                font-size: 0.75rem !important;
+            }
         }
         /* แอนิเมชันสำหรับปุ่มฟันเฟือง */
         @keyframes spin {
@@ -1545,7 +1566,7 @@
                 { id: 'b_area', label: 'พื้นที่ทั้งหลัง (ตร.ม.)', type: 'number' },
                 { id: 'b_note', label: 'รายละเอียด', type: 'select', options: ['ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true },
                 // ✅ กลุ่มที่ 1 - สีเขียว
-                { id: 'b_use', label: 'ใช้ประโยชน์', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักกรณีไม่ได้เป็นเจ้าของกรรมสิทธิ์ที่ดิน)', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น กรณีให้เช่าอยู่อาศัย หรือแบ่งพื้นที่ให้เช่าอยู่อาศัย', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย)', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-green' },
+                { id: 'b_use', label: 'ใช้ประโยชน์', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักไม่เป็นกรรมสิทธิ์ที่ดิน', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น ให้เช่ารายเดือน', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-green' },
                 { id: 'per_use', label: 'การเช่า', type: 'select', options: ['ใช้ประโยชน์เอง', 'ให้เช่า', 'ผู้อื่นใช้'], customClass: 'bg-custom-green' },
                 { id: 'full_area', label: 'ใช้ทั้งหลัง', type: 'select', options: ['', 'เต็มพื้นที่', 'บางส่วน'], customClass: 'bg-custom-green' },
                 { id: 'buse_floor', label: 'ชั้นที่ใช้', type: 'select', options: ['1-1', '1-2', '1-3', '1-4', '1-5'], allowCustom: true, customClass: 'bg-custom-green' },
@@ -1553,14 +1574,21 @@
                 { id: 'ment_use', label: 'รายละเอียด', type: 'select', options: ['ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true, customClass: 'bg-custom-green' },
                 
                 // ✅ กลุ่มที่ 2 - สีชมพู
-                { id: 'b_use2', label: 'ใช้ประโยชน์ (2)', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักกรณีไม่ได้เป็นเจ้าของกรรมสิทธิ์ที่ดิน)', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น กรณีให้เช่าอยู่อาศัย หรือแบ่งพื้นที่ให้เช่าอยู่อาศัย', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย)', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-pink' },
+                { id: 'b_use2', label: 'ใช้ประโยชน์ (2)', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักไม่เป็นกรรมสิทธิ์ที่ดิน', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น ให้เช่ารายเดือน', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-pink' },
                 { id: 'per_use2', label: 'การเช่า (2)', type: 'select', options: ['ใช้ประโยชน์เอง', 'ให้เช่า', 'ผู้อื่นใช้'], customClass: 'bg-custom-pink' },
                 { id: 'buse_flor2', label: 'ชั้นที่ใช้ (2)', type: 'select', options: ['', '1-1', '1-2', '1-3', '1-4', '1-5'], allowCustom: true, customClass: 'bg-custom-pink' },
                 { id: 'buse_area2', label: 'พื้นที่ใช้ (2) (ตร.ม.)', type: 'number', customClass: 'bg-custom-pink' },
                 { id: 'ment_use2', label: 'รายละเอียด (2)', type: 'select', options: ['ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true, customClass: 'bg-custom-pink' },
                 { id: 'full_area2', label: 'ใช้ทั้งหลัง (2)', type: 'select', options: ['', 'บางส่วน'], customClass: 'bg-custom-pink' },
-                { id: 'land_use', label: 'ใช้ประโยชน์ที่ดิน', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักกรณีไม่ได้เป็นเจ้าของกรรมสิทธิ์ที่ดิน)', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น กรณีให้เช่าอยู่อาศัย หรือแบ่งพื้นที่ให้เช่าอยู่อาศัย', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย)', '4-ทิ้งไว้ว่างเปล่า/รกร้าง', '5-ใช้ประโยชน์หลายประเภท'], customClass: 'bg-custom-green' },
-                // ✅ สถานะการตรวจสอบ - สีเขียว
+                { 
+                  id: 'land_use', 
+                  label: 'ใช้ประโยชน์ที่ดิน', 
+                  type: 'select', 
+                  options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักไม่เป็นกรรมสิทธิ์ที่ดิน', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น ให้เช่ารายเดือน', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย', '4-ทิ้งไว้ว่างเปล่า/รกร้าง', '5-ใช้ประโยชน์หลายประเภท'], 
+                  customClass: 'bg-custom-green',
+                  computed: true, // ✅ เพิ่มบรรทัดนี้ (แทน readonly: true)
+                  disabled: true  // ✅ เพิ่มบรรทัดนี้
+                },
                 { id: 'check', label: 'สถานะการตรวจสอบ', type: 'select', options: ['ยังไม่สำรวจ', 'ถ่ายรูปแล้ว', 'ตรวจสอบแล้ว'], customClass: 'bg-custom-check-status' }
             ];
 
@@ -1596,7 +1624,7 @@
                     readonly: true,
                     description: 'ค่านี้สร้างอัตโนมัติจาก 2 ฟิลด์ด้านบน'
                 },
-                { id: 's_text', label: 'ข้อความ', type: 'text' },
+                { id: 's_text', label: 'ข้อความในป้าย', type: 'text' },
                 { id: 'comment', label: 'หมายเหตุ', type: 'text' },
                 { id: 'fullname', label: 'เจ้าของ', type: 'text' },
                 { id: 'address', label: 'ที่อยู่', type: 'text' },
@@ -1648,9 +1676,12 @@
                     </div>`;
                 } else if (f.type === 'select') {
                     const customClass = f.customClass || '';
+                    // ✅ เพิ่มเงื่อนไข disabled
+                    const isDisabled = f.disabled ? 'disabled' : '';
+                    
                     if (f.allowCustom) {
                         const value = fieldValue !== undefined && fieldValue !== null && fieldValue !== '' ? fieldValue : (f.defaultValue !== undefined ? f.defaultValue : '');
-                        html += `<input type="text" name="${f.id}" class="form-input ${customClass}" list="${f.id}-options" value="${value}">`;
+                        html += `<input type="text" name="${f.id}" class="form-input ${customClass}" list="${f.id}-options" value="${value}" ${isDisabled}>`;
                         html += `<datalist id="${f.id}-options">`;
                         f.options.forEach(opt => {
                             html += `<option value="${opt}">${opt}</option>`;
@@ -1658,13 +1689,14 @@
                         html += `</datalist>`;
                     } else {
                         const value = fieldValue !== undefined && fieldValue !== null && fieldValue !== '' ? fieldValue : (f.defaultValue !== undefined ? f.defaultValue : '');
-                        html += `<select name="${f.id}" class="form-input ${customClass}">`;
+                        html += `<select name="${f.id}" class="form-input ${customClass}" ${isDisabled}>`; // ✅ เพิ่ม ${isDisabled}
                         f.options.forEach(opt => {
                             const selected = String(value) === String(opt) ? 'selected' : '';
                             html += `<option value="${opt}" ${selected}>${opt}</option>`;
                         });
                         html += `</select>`;
                     }
+
                 } else {
                     const customClass = f.customClass || '';
                     html += `<input type="${f.type}" name="${f.id}" class="form-input ${customClass}" value="${fieldValue}"${f.readonly ? ' readonly' : ''}>`;
@@ -1674,6 +1706,141 @@
             
             form.innerHTML = html;
             // ✅ เพิ่มหลังจาก form.innerHTML = html; ในฟังก์ชัน openEditPanel()
+            // ✅ ผูกเหตุการณ์เมื่อเลือกค่าใน 'ใช้ทั้งหลัง' + อัปเดต "ชั้นที่ใช้" และ "พื้นที่ใช้" อัตโนมัติ (ไม่ปิดการแก้ไข)
+            if (type === 'building') {
+                const fullAreaSelect = document.querySelector('select[name="full_area"]');
+                const noFloorSelect = document.querySelector('select[name="no_floor"]');
+                const buseFloorInput = document.querySelector('input[name="buse_floor"]'); // allowCustom: true → เป็น input
+                const bAreaInput = document.querySelector('input[name="b_area"]'); // พื้นที่ทั้งหลัง
+                const buseAreaInput = document.querySelector('input[name="buse_area"]'); // พื้นที่ใช้ (ไม่ใช่ buse_area2!)
+                
+                if (fullAreaSelect && noFloorSelect && buseFloorInput && bAreaInput && buseAreaInput) {
+                    // ฟังก์ชันอัปเดต "ชั้นที่ใช้" จาก "จำนวนชั้น" (เฉพาะเมื่อเลือก "เต็มพื้นที่")
+                    const updateBuseFloor = () => {
+                        if (fullAreaSelect.value === 'เต็มพื้นที่') {
+                            const noFloorValue = noFloorSelect.value;
+                            buseFloorInput.value = noFloorValue ? `1-${noFloorValue}` : '1-1';
+                        }
+                    };
+                    
+                    // ✅ ฟังก์ชันอัปเดต "พื้นที่ใช้" จาก "พื้นที่ทั้งหลัง" (เฉพาะเมื่อเลือก "เต็มพื้นที่")
+                    const updateBuseArea = () => {
+                        if (fullAreaSelect.value === 'เต็มพื้นที่') {
+                            buseAreaInput.value = bAreaInput.value || ''; // คัดลอกค่าทันที
+                            // ✅ ไม่ปิดการแก้ไข - ผู้ใช้ยังแก้ไขได้ตลอดเวลา
+                        }
+                    };
+                    
+                    // ฟังก์ชันจัดการกลุ่มที่ 2 (ล้างค่า + ปิดการแก้ไขเมื่อเลือก "เต็มพื้นที่")
+                    const toggleGroup2 = () => {
+                        const isFullArea = fullAreaSelect.value === 'เต็มพื้นที่';
+                        
+                        // รายการช่องในกลุ่มที่ 2 ที่ต้องล้างค่าและปิดการแก้ไข
+                        const group2Fields = [
+                            'b_use2', 'per_use2', 'buse_flor2', 'buse_area2', 'ment_use2', 'full_area2'
+                        ];
+                        
+                        group2Fields.forEach(fieldId => {
+                            const field = document.querySelector(`[name="${fieldId}"]`);
+                            if (field) {
+                                if (isFullArea) {
+                                    field.value = '';
+                                    field.disabled = true;
+                                    field.style.backgroundColor = '#f3f4f6';
+                                    field.style.cursor = 'not-allowed';
+                                } else {
+                                    field.disabled = false;
+                                    field.style.backgroundColor = '';
+                                    field.style.cursor = '';
+                                }
+                            }
+                        });
+                        
+                        // ✅ อัปเดต "ชั้นที่ใช้" และ "พื้นที่ใช้" ทันทีเมื่อเปลี่ยนค่า "ใช้ทั้งหลัง"
+                        updateBuseFloor();
+                        updateBuseArea();
+                    };
+                    
+                    // ผูกเหตุการณ์เมื่อเลือกค่าใน "ใช้ทั้งหลัง"
+                    fullAreaSelect.addEventListener('change', toggleGroup2);
+                    
+                    // ผูกเหตุการณ์เมื่อเปลี่ยน "จำนวนชั้น" (อัปเดต "ชั้นที่ใช้" ทันทีถ้าเลือก "เต็มพื้นที่")
+                    noFloorSelect.addEventListener('change', updateBuseFloor);
+                    
+                    // ✅ ผูกเหตุการณ์เมื่อเปลี่ยน "พื้นที่ทั้งหลัง" (อัปเดต "พื้นที่ใช้" ทันทีถ้าเลือก "เต็มพื้นที่")
+                    bAreaInput.addEventListener('input', updateBuseArea);
+                    
+                    // ตั้งค่าเริ่มต้นเมื่อเปิดแผง
+                    toggleGroup2();
+                }
+            }
+            // ✅ คำนวณค่า "ใช้ประโยชน์ที่ดิน" อัตโนมัติ (เฉพาะสิ่งปลูกสร้าง)
+            if (type === 'building') {
+                const updateLandUse = () => {
+                    const bUse = document.querySelector('select[name="b_use"]')?.value || '';
+                    const bUse2 = document.querySelector('select[name="b_use2"]')?.value || '';
+                    const landUseSelect = document.querySelector('select[name="land_use"]');
+                    
+                    if (!landUseSelect) return;
+                    
+                    let newValue = '';
+                    
+                    // เงื่อนไขการคำนวณ
+                    if (bUse && bUse2) {
+                        newValue = '5-ใช้ประโยชน์หลายประเภท'; // ทั้งสองช่องมีค่า
+                    } else if (bUse) {
+                        newValue = bUse; // มีค่าจาก b_use เท่านั้น
+                    } else if (bUse2) {
+                        newValue = bUse2; // มีค่าจาก b_use2 เท่านั้น
+                    }
+                    
+                    // ตั้งค่าและปิดการแก้ไข
+                    landUseSelect.value = newValue;
+                    landUseSelect.disabled = true; // ป้องกันการแก้ไข
+                    landUseSelect.style.backgroundColor = '#f3f4f6'; // สีพื้นหลังเทาอ่อน
+                    landUseSelect.style.cursor = 'not-allowed';
+                };
+                
+                // ผูกเหตุการณ์เมื่อเลือกค่า
+                const bUseSelect = document.querySelector('select[name="b_use"]');
+                const bUse2Select = document.querySelector('select[name="b_use2"]');
+                
+                if (bUseSelect && bUse2Select) {
+                    bUseSelect.addEventListener('change', updateLandUse);
+                    bUse2Select.addEventListener('change', updateLandUse);
+                    
+                    // ตั้งค่าเริ่มต้น
+                    updateLandUse();
+                }
+            }
+            // ✅ เชื่อมโยงค่าจาก 'b_note' ไปยัง 'ment_use' และ 'ment_use2' (ไม่อัปเดต ment_use2 ถ้าปิดการแก้ไข)
+            if (type === 'building') {
+                const bNoteInput = document.querySelector('input[name="b_note"]');
+                const mentUseInput = document.querySelector('input[name="ment_use"]');
+                const mentUse2Input = document.querySelector('input[name="ment_use2"]');
+                
+                if (bNoteInput && mentUseInput && mentUse2Input) {
+                    const syncMentUse = () => {
+                        const value = bNoteInput.value;
+                        
+                        // ✅ อัปเดต 'ment_use' เสมอ (ไม่มีเงื่อนไข)
+                        mentUseInput.value = value;
+                        
+                        // ✅ อัปเดต 'ment_use2' เฉพาะเมื่อไม่ได้ถูกปิดการแก้ไข
+                        if (!mentUse2Input.disabled) {
+                            mentUse2Input.value = value;
+                        }
+                        // ⚠️ หากปิดการแก้ไข (disabled=true) → ไม่ทำอะไรกับ ment_use2
+                    };
+                    
+                    bNoteInput.addEventListener('input', syncMentUse);
+                    syncMentUse(); // ตั้งค่าเริ่มต้น
+                    
+                    console.log('✅ เชื่อมโยง b_note → ment_use (ment_use2 อัปเดตเฉพาะเมื่อเปิดการแก้ไข)');
+                } else {
+                    console.warn('⚠️ ไม่พบฟิลด์ b_note, ment_use หรือ ment_use2');
+                }
+            }
             if (type === 'sign') {
                 // ฟังก์ชันอัปเดตค่า s_characte อัตโนมัติ
                 const updateSCharacte = () => {
@@ -4069,4 +4236,3 @@
 </body>
 
 </html>
-

@@ -1620,7 +1620,13 @@
                 { id: 'b_use2', label: 'ใช้ประโยชน์ (2)', type: 'select', options: ['', '1-เกษตรกรรม', '2-(1)ที่อยู่อาศัย หลังหลัก', '2-(2)ที่อยู่อาศัย หลังหลักไม่เป็นกรรมสิทธิ์ที่ดิน', '2-(3)ที่อยู่อาศัย หลังอื่นๆ เช่น ให้เช่ารายเดือน', '3-อื่นๆ ไม่ใช่เกษตรกรรมหรือที่อยู่อาศัย', '4-ทิ้งไว้ว่างเปล่า/รกร้าง'], customClass: 'bg-custom-pink' },
                 { id: 'per_use2', label: 'การเช่า (2)', type: 'select', options: ['ใช้ประโยชน์เอง', 'ให้เช่า', 'ผู้อื่นใช้'], defaultValue: 'ใช้ประโยชน์เอง' , customClass: 'bg-custom-pink' },
                 { id: 'buse_flor2', label: 'ชั้นที่ใช้ (2)', type: 'select', options: ['', '1-1', '1-2', '1-3', '1-4', '1-5'], allowCustom: true, customClass: 'bg-custom-pink' },
-                { id: 'buse_area2', label: 'พื้นที่ใช้ (2) (ตร.ม.)', type: 'number', customClass: 'bg-custom-pink' },
+                {
+                  id: 'buse_area2', 
+                  label: 'พื้นที่ใช้ (2) (ตร.ม.)', 
+                  type: 'number', 
+                  customClass: 'bg-custom-pink',
+                  withButtons: true // เพิ่มฟลากรูปปุ่ม
+                },
                 { id: 'ment_use2', label: 'รายละเอียด (2)', type: 'select', options: ['', 'ยุ้งข้าว', 'คอกวัว', 'เล้าไก่', 'คอกหมู', 'โรงจอดรถ', 'ห้องน้ำ', 'ร้านค้าของชำ', 'มินิมาร์ท', 'กระท่อมนา', 'เพิงพัก', 'โรงเก็บของ', 'เก็บฟาง', 'โรงครัว', 'ศาลาพักผ่อน', 'ตู้เติมเงิน', 'ตู้น้ำมันหยอดเหรียญ', 'ตู้น้ำดื่มหยอดเหรียญ', 'รื้อ'], allowCustom: true, customClass: 'bg-custom-pink' },
                 { id: 'full_area2', label: 'ใช้ทั้งหลัง (2)', type: 'select', options: ['', 'บางส่วน'], customClass: 'bg-custom-pink' },
                 { 
@@ -1761,10 +1767,38 @@
                         html += `</select>`;
                     }
 
+            } else if (f.type === 'number') {
+                const customClass = f.customClass || '';
+                // ✅ ตรวจสอบว่าเป็นฟิลด์ buse_area2 ที่ต้องการปุ่ม
+                if (f.id === 'buse_area2' && f.withButtons) {
+                    html += `
+                    <div class="flex gap-2 items-center">
+                        <input type="number" name="${f.id}" class="form-input ${customClass} flex-1" value="${fieldValue}"${f.readonly ? ' readonly' : ''}>
+                        <div class="flex gap-1">
+                            <!-- ปุ่มแรก: สีส้ม ข้อความ "B" -->
+                            <button type="button" onclick="openAreaCalculator()" 
+                                class="px-3 py-2 bg-orange-500 text-white rounded font-bold text-sm hover:bg-orange-600 transition"
+                                title="คำนวณพื้นที่">
+                                B
+                            </button>
+                            <!-- ปุ่มที่สอง: สีเขียว ไอคอนสามเหลี่ยม (Δ) -->
+                            <button type="button" onclick="calculateDeltaArea()" 
+                                class="px-3 py-2 bg-green-500 text-white rounded font-bold text-sm hover:bg-green-600 transition"
+                                title="คำนวณผลต่าง">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2L22 22H2L12 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    `;
                 } else {
-                    const customClass = f.customClass || '';
                     html += `<input type="${f.type}" name="${f.id}" class="form-input ${customClass}" value="${fieldValue}"${f.readonly ? ' readonly' : ''}>`;
                 }
+            } else {
+                const customClass = f.customClass || '';
+                html += `<input type="${f.type}" name="${f.id}" class="form-input ${customClass}" value="${fieldValue}"${f.readonly ? ' readonly' : ''}>`;
+            }
                 html += `</div>`;
             });
             
@@ -4079,7 +4113,144 @@
 
         // ============================================
 
+        // ============================================
+        // ข้อ 1.1: คำนวณพื้นที่ (กว้าง × ยาว)
+        // ============================================
+        let areaCalculatorModal = null;
 
+        function openAreaCalculator() {
+            // ปิดโมดัลเก่าถ้ามี
+            if (areaCalculatorModal) {
+                areaCalculatorModal.remove();
+            }
+            
+            // สร้างหน้าต่างคำนวณพื้นที่
+            areaCalculatorModal = document.createElement('div');
+            areaCalculatorModal.className = 'fixed inset-0 bg-black/50 z-[3000] flex items-center justify-center p-4';
+            areaCalculatorModal.innerHTML = `
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md animate-scale-in">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h3 class="font-bold text-lg text-blue-900">คำนวณพื้นที่</h3>
+                    <button onclick="closeAreaCalculator()" class="p-2 hover:bg-gray-200 rounded-full">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="form-label">กว้าง (ม.)</label>
+                            <input type="number" id="calc-width" class="form-input" placeholder="0" step="0.01" oninput="calculateAreaResult()">
+                        </div>
+                        <div>
+                            <label class="form-label">ยาว (ม.)</label>
+                            <input type="number" id="calc-length" class="form-input" placeholder="0" step="0.01" oninput="calculateAreaResult()">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">ผลลัพธ์ (ตร.ม.)</label>
+                        <input type="number" id="calc-result" class="form-input bg-custom-green font-bold" readonly placeholder="0">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="clearAreaCalculator()" 
+                            class="flex-1 py-2 bg-gray-500 text-white rounded font-bold hover:bg-gray-600 transition">
+                            <i data-lucide="trash-2" class="w-4 h-4 inline mr-1"></i>
+                            ล้าง
+                        </button>
+                        <button type="button" onclick="addAreaToField()" 
+                            class="flex-1 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">
+                            <i data-lucide="plus" class="w-4 h-4 inline mr-1"></i>
+                            บวกเพิ่ม
+                        </button>
+                    </div>
+                </div>
+            </div>
+            `;
+            document.body.appendChild(areaCalculatorModal);
+            lucide.createIcons();
+            
+            // โฟกัสที่ช่องกว้าง
+            document.getElementById('calc-width')?.focus();
+        }
+
+        // คำนวณผลลัพธ์เรียลไทม์
+        function calculateAreaResult() {
+            const width = parseFloat(document.getElementById('calc-width').value) || 0;
+            const length = parseFloat(document.getElementById('calc-length').value) || 0;
+            const result = width * length;
+            document.getElementById('calc-result').value = result.toFixed(2);
+        }
+
+        // ล้างค่า
+        function clearAreaCalculator() {
+            document.getElementById('calc-width').value = '';
+            document.getElementById('calc-length').value = '';
+            document.getElementById('calc-result').value = '0';
+        }
+
+        // บวกเพิ่มค่าในช่อง buse_area2
+        function addAreaToField() {
+            const result = parseFloat(document.getElementById('calc-result').value) || 0;
+            const buseArea2Field = document.querySelector('input[name="buse_area2"]');
+            
+            if (!buseArea2Field) {
+                alert('ไม่พบช่องกรอกพื้นที่ใช้ (2)');
+                return;
+            }
+            
+            const currentValue = parseFloat(buseArea2Field.value) || 0;
+            const newValue = currentValue + result;
+            
+            buseArea2Field.value = newValue.toFixed(2);
+            showNotificationLeft(`เพิ่มพื้นที่ ${result.toFixed(2)} ตร.ม. รวมเป็น ${newValue.toFixed(2)} ตร.ม.`, 'success');
+            
+            // ปิดหน้าต่าง
+            closeAreaCalculator();
+        }
+
+        // ปิดหน้าต่าง
+        function closeAreaCalculator() {
+            if (areaCalculatorModal) {
+                areaCalculatorModal.classList.add('animate-scale-out');
+                setTimeout(() => {
+                    if (areaCalculatorModal && areaCalculatorModal.parentNode) {
+                        areaCalculatorModal.remove();
+                    }
+                    areaCalculatorModal = null;
+                }, 200);
+            }
+        }
+
+        // ============================================
+        // ข้อ 1.2: คำนวณผลต่าง (b_area - buse_area2)
+        // ============================================
+        function calculateDeltaArea() {
+            const bAreaField = document.querySelector('input[name="b_area"]');
+            const buseArea2Field = document.querySelector('input[name="buse_area2"]');
+            const buseAreaField = document.querySelector('input[name="buse_area"]');
+            
+            if (!bAreaField || !buseArea2Field || !buseAreaField) {
+                showNotificationLeft('ไม่พบฟิลด์ที่ต้องการ', 'error');
+                return;
+            }
+            
+            const bArea = parseFloat(bAreaField.value) || 0;
+            const buseArea2 = parseFloat(buseArea2Field.value) || 0;
+            
+            if (buseArea2 === 0) {
+                showNotificationLeft('⚠️ ช่อง "พื้นที่ใช้ (2)" ยังไม่มีค่า', 'warning');
+                return;
+            }
+            
+            const result = bArea - buseArea2;
+            
+            if (result < 0) {
+                showNotificationLeft('❌ ผลลัพธ์ติดลบ ตรวจสอบค่าอีกครั้ง', 'error');
+                return;
+            }
+            
+            buseAreaField.value = result.toFixed(2);
+            showNotificationLeft(`คำนวณผลต่าง: ${bArea.toFixed(2)} - ${buseArea2.toFixed(2)} = ${result.toFixed(2)} ตร.ม.`, 'success');
+        }
 
 
 

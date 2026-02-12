@@ -1031,21 +1031,18 @@
         // ฟังก์ชันบันทึกข้อมูล (แก้ไขส่วนจัดการรูปภาพ - แยกเก็บลิ้งค์และชื่อไฟล์)
         // ============================================
         async function saveSurveyData() {
-            // ✅ ตรวจสอบว่ามีฟอร์มหรือไม่
             const form = document.getElementById('survey-form');
             if (!form) {
-                console.error('❌ ไม่พบฟอร์ม #survey-form');
                 showNotificationLeft('ไม่พบฟอร์มข้อมูล', 'error');
                 return;
             }
             
-            // ✅ รวบรวมข้อมูลจากฟอร์ม
+            // ✅ รวบรวมข้อมูลจากฟอร์ม (ไม่รวมฟิลด์ไฟล์)
             const formData = new FormData(form);
             const data = {};
-            
+
             for (let [key, value] of formData.entries()) {
-                // ข้ามฟิลด์ชั่วคราว
-                if (key.endsWith('_temp')) continue;
+                if (key.endsWith('_temp')) continue; // ข้ามฟิลด์ชั่วคราว
                 
                 const input = form.querySelector(`[name="${key}"]`);
                 if (input && input.type === 'checkbox') {
@@ -1054,8 +1051,16 @@
                     data[key] = value.trim();
                 }
             }
-            
-            // ✅ ดึงพิกัดจากหน้าจอ
+
+            // ✅ เพิ่มค่าฟิลด์ที่ถูกปิดการใช้งาน (disabled) แต่จำเป็นต้องส่ง
+            //    (เนื่องจาก disabled fields ไม่ถูกรวมใน FormData โดยอัตโนมัติ)
+            const landUseSelect = form.querySelector('select[name="land_use"]');
+            if (landUseSelect) {
+                data.land_use = landUseSelect.value.trim(); // ส่งค่า "ใช้ประโยชน์ที่ดิน" ไปยังเซิร์ฟเวอร์
+                console.log('✅ เพิ่มค่า land_use ในข้อมูลส่งออก:', data.land_use);
+            }
+
+            // ✅ ดึงพิกัด (วางต่อจากโค้ดด้านบน)
             const latlngDisplay = document.getElementById('latlng-display')?.innerText;
             if (!latlngDisplay || latlngDisplay.trim() === '') {
                 showNotificationLeft('ไม่พบพิกัดตำแหน่ง', 'error');
@@ -1063,51 +1068,49 @@
             }
             data.lat_long = latlngDisplay.trim();
             
-            // ✅ ตรวจสอบประเภท (รองรับทั้งเพิ่มและแก้ไข)
+            // ✅ ตรวจสอบประเภทและ rowKey
             let markerType;
             let rowKey = null;
             let action = 'quickAdd';
             
             if (editingMarker && editingMarker._popupData) {
-                // กำลังแก้ไขจุดเดิม
                 markerType = editingMarker._popupData.type || (editingMarker._popupData.building_c ? 'building' : 'sign');
                 rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
                 action = 'update';
             } else {
-                // กำลังเพิ่มจุดใหม่
                 markerType = document.getElementById('marker-type')?.value || 'building';
             }
             
-            // ✅ ตรวจสอบประเภท
             if (!markerType || !['building', 'sign'].includes(markerType)) {
                 showNotificationLeft('ไม่พบประเภทข้อมูล', 'error');
                 return;
             }
             
             // ============================================
-            // จัดการรูปภาพ - ตั้งชื่อไฟล์อัตโนมัติ + บันทึกลง IndexedDB
+            // ✅ จัดการรูปภาพ: เฉพาะเมื่อมีการเลือกไฟล์ใหม่เท่านั้น
             // ============================================
             let imageBase64 = null;
             let fileNameParam = null;
-            
             const fileInput = form.querySelector('input[type="file"]');
+            
+            // ✅ ตรวจสอบว่ามีการเลือกไฟล์ใหม่หรือไม่
             if (fileInput && fileInput.files[0]) {
                 const file = fileInput.files[0];
                 const maxSize = markerType === 'building' ? 1500 : 2000;
                 
-                // ✅ ตั้งชื่อไฟล์อัตโนมัติ
+                // ตั้งชื่อไฟล์ใหม่
                 const prefix = markerType === 'building' ? 'B' : 'S';
                 const code = data.building_c || data.s_code || Date.now().toString().slice(-5);
                 const extension = file.name.split('.').pop().toLowerCase() || 'jpg';
-                fileNameParam = `${prefix}${code}.${extension}`; // เช่น B12345.jpg
+                fileNameParam = `${prefix}${code}.${extension}`;
                 
-                // ✅ ปรับขนาดรูปภาพ
+                // ปรับขนาดรูปภาพ
                 try {
                     const resizedImage = await resizeImage(file, maxSize, maxSize);
                     const base64Data = resizedImage.split(',')[1];
                     imageBase64 = `${file.type};base64,${base64Data}`;
                     
-                    // ✅ บันทึกรูปภาพลงใน IndexedDB (สร้างคิวรูป)
+                    // บันทึกลง IndexedDB
                     await saveImageToDB(imageBase64, fileNameParam, rowKey || Date.now(), markerType);
                     console.log(`✅ รูปภาพบันทึกใน IndexedDB: ${fileNameParam}`);
                     
@@ -1115,7 +1118,6 @@
                     data.picture = fileNameParam;
                 } catch (err) {
                     console.error('Error resizing image:', err);
-                    // Fallback: ใช้รูปภาพต้นฉบับ
                     try {
                         const arrayBuffer = await file.arrayBuffer();
                         const bytes = [...new Uint8Array(arrayBuffer)];
@@ -1128,19 +1130,36 @@
                     } catch (fallbackErr) {
                         console.error('Fallback failed:', fallbackErr);
                         showNotificationLeft('⚠️ ไม่สามารถบันทึกรูปภาพได้', 'warning');
+                        // ✅ ไม่เก็บค่า picture หากบันทึกไม่สำเร็จ
+                        delete data.picture;
+                        imageBase64 = null;
+                        fileNameParam = null;
                     }
                 }
+            } else {
+                // ✅ สำคัญมาก: ไม่เก็บค่า picture ในข้อมูลเมื่อไม่มีการเลือกไฟล์ใหม่
+                // เพื่อป้องกันไม่ให้เซิร์ฟเวอร์ทับค่าเดิมด้วย "image.jpg"
+                console.log('ℹ️ ไม่มีการเลือกรูปภาพใหม่ - ไม่ส่งค่า picture ไปยังเซิร์ฟเวอร์');
             }
             
+            // ✅ วางโค้ดตรวจสอบที่นี่ (หลังจากตั้งค่า data.picture และก่อนสร้างคิว)
+            if (data.picture === 'image.jpg' || data.picture === '') {
+                delete data.picture;
+                console.warn('⚠️ ลบค่า picture ที่ไม่ถูกต้องออกก่อนส่ง: ', data.picture);
+            }
+            if (fileNameParam === 'image.jpg' || !fileNameParam || fileNameParam.trim() === '') {
+                fileNameParam = null;
+                imageBase64 = null;
+                console.warn('⚠️ ยกเลิกการส่ง fileNameParam ที่ไม่ถูกต้อง');
+            }
+
             // ============================================
-            // สร้างคิวสำหรับอัปโหลดข้อมูล
+            // ✅ สร้างคิวสำหรับอัปโหลด
             // ============================================
             const queueId = addToSyncQueue(action, markerType, data, rowKey, imageBase64, fileNameParam);
             console.log(`✅ สร้างคิวสำเร็จ: ${queueId} (${action})`);
             
-            // ============================================
-            // อัปเดตข้อมูลในมาร์กเกอร์ทันที (แสดงผลทันที)
-            // ============================================
+            // ✅ อัปเดตมาร์กเกอร์ทันที
             if (editingMarker) {
                 editingMarker._popupData = {
                     ...editingMarker._popupData,
@@ -1151,16 +1170,12 @@
                 setupMarkerPopup(editingMarker, editingMarker._popupData, markerType);
             }
             
-            // ============================================
-            // ปิดแผงและแสดงแจ้งเตือน
-            // ============================================
+            // ✅ ปิดแผงและแจ้งเตือน
             closePanel();
-            const actionText = action === 'update' ? 'อัปเดตข้อมูลเรียบร้อยแล้ว!' : 'บันทึกข้อมูลเรียบร้อยแล้ว!';
-            showNotificationLeft(`${actionText} (รออัปโหลด)`, 'success');
+            const msg = action === 'update' ? 'อัปเดตข้อมูลเรียบร้อยแล้ว!' : 'บันทึกข้อมูลเรียบร้อยแล้ว!';
+            showNotificationLeft(`${msg} (รออัปโหลด)`, 'success');
             
-            // ============================================
-            // เริ่มกระบวนการซิงค์ทันที (ถ้าออนไลน์)
-            // ============================================
+            // ✅ เริ่มซิงค์ทันทีหากออนไลน์
             if (isOnline && navigator.onLine) {
                 setTimeout(() => {
                     console.log('🔄 เริ่มซิงค์คิวข้อมูล...');
@@ -1841,6 +1856,17 @@
                             fullArea2Select.disabled = true;
                             fullArea2Select.style.backgroundColor = '#f3f4f6';
                             fullArea2Select.style.cursor = 'not-allowed';
+                            
+                            // ✅ ทริกเกอร์เหตุการณ์ change บน b_use2 เพื่ออัปเดต land_use ทันที
+                            const bUse2Field = document.querySelector('select[name="b_use2"]');
+                            if (bUse2Field) {
+                                // ตั้งค่าเป็นว่างก่อน (เพื่อความชัดเจน)
+                                bUse2Field.value = '';
+                                // สร้างและส่งเหตุการณ์ change
+                                const changeEvent = new Event('change', { bubbles: true });
+                                bUse2Field.dispatchEvent(changeEvent);
+                                console.log('✅ ทริกเกอร์ change event บน b_use2 เพื่ออัปเดต land_use');
+                            }
                         } else {
                             // เปิดการแก้ไขเมื่อไม่ได้เลือก "เต็มพื้นที่"
                             fullArea2Select.disabled = false;

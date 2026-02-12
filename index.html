@@ -158,6 +158,19 @@
         #settings-menu button:hover {
           transform: translateY(0) scale(1.05) !important;
         }
+        /* ============================================
+           ซ่อนลูกศรขึ้นลงในช่องกรอกตัวเลขในแผงข้อมูล (เพื่อป้องกันการเปลี่ยนค่าโดยไม่ตั้งใจเมื่อหมุนสกอร์ล)
+           ============================================ */
+        #side-panel input[type="number"]::-webkit-inner-spin-button,
+        #side-panel input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+        }
+
+        #side-panel input[type="number"] {
+          -moz-appearance: textfield !important; /* Firefox */
+          appearance: textfield !important; /* Standard */
+        }
         /* ========== แอนิเมชันเลื่อนขึ้น/ลง + ศูนย์กลางสำหรับเป้าเล็งและปุ่มบวก ========== */
         #crosshair {
           transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
@@ -4270,6 +4283,23 @@
                     }
                 });
             }
+        });
+
+        // ============================================
+        // ป้องกันการเปลี่ยนค่าช่องตัวเลขโดยไม่ตั้งใจเมื่อหมุนสกอร์ลเมาส์
+        // ============================================
+        document.addEventListener('DOMContentLoaded', function() {
+          const surveyForm = document.getElementById('survey-form');
+          if (surveyForm) {
+            // ใช้ event delegation ครอบคลุมทุกช่องตัวเลขแม้สร้างแบบไดนามิก
+            surveyForm.addEventListener('wheel', function(e) {
+              if (e.target.tagName === 'INPUT' && e.target.type === 'number') {
+                e.preventDefault(); // ป้องกันการเปลี่ยนค่าเมื่อหมุนสกอร์ล
+              }
+            }, { passive: false }); // ต้องตั้ง passive: false เพื่อเรียก preventDefault()
+            
+            console.log('✅ เปิดใช้งานการป้องกันการเปลี่ยนค่าช่องตัวเลขโดยไม่ตั้งใจ');
+          }
         });
 
         // ฟังก์ชันโหลดมาร์กเกอร์เฉพาะที่มองเห็น + buffer

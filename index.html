@@ -56,6 +56,22 @@
         .v-top { top: -20px; } .v-bottom { bottom: -20px; }
         .h-left { left: -20px; } .h-right { right: -20px; }
 
+        /* วงกลม - ยังไม่สำรวจ (ค่าเริ่มต้น) */
+        .circle-round {
+            border-radius: 50%;
+        }
+
+        /* สี่เหลี่ยม - ถ่ายรูปแล้ว */
+        .circle-square {
+            border-radius: 50%;
+        }
+
+        /* รูปหมุด - ตรวจสอบแล้ว (ไม่ต้องใช้คลาสพิเศษ เพราะใช้ SVG แทน) */
+        .pin-marker {
+            /* ไม่ต้องกำหนดสไตล์พิเศษ เพราะใช้ SVG */
+        }
+
+
         /* สไตล์พิเศษสำหรับสีพื้นหลังช่องกรอกตามเงื่อนไข */
         .bg-custom-green { 
             background-color: rgba(187, 247, 208, 0.9) !important; 
@@ -1006,7 +1022,7 @@
 
             document.getElementById('confirm-overlay').classList.add('hidden');
             
-            const tempMarker = createCircleMarker(latlng, activeTool);
+            const tempMarker = createCircleMarker(latlng, activeTool, false, 'ยังไม่สำรวจ');
             tempMarker.addTo(surveyLayers);
             
             backgroundUpload(latlng, activeTool, tempMarker);
@@ -3178,7 +3194,7 @@
             if (!r.lat_long) return;
             const coords = r.lat_long.split(',').map(Number);
             if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode, r.check);
             setupMarkerPopup(m, r, 'building');
             m.addTo(surveyLayers);
           });
@@ -3187,7 +3203,7 @@
             if (!r.lat_long) return;
             const coords = r.lat_long.split(',').map(Number);
             if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
-            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+            const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode, r.check);
             setupMarkerPopup(m, r, 'sign');
             m.addTo(surveyLayers);
           });
@@ -3543,7 +3559,7 @@
                             return;
                         }
                         
-                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode);
+                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'building', isEditMode, r.check);
                         m._popupData = r;
                         setupMarkerPopup(m, r, 'building');
                         m.addTo(surveyLayers);
@@ -3561,7 +3577,7 @@
                             return;
                         }
                         
-                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode);
+                        const m = createCircleMarker(L.latLng(coords[0], coords[1]), 'sign', isEditMode, r.check);
                         m._popupData = r;
                         setupMarkerPopup(m, r, 'sign');
                         m.addTo(surveyLayers);
@@ -5498,39 +5514,65 @@
         }
 
 
-        // เมื่อสร้างมาร์กเกอร์ใหม่
-        function createCircleMarker(latlng, type, isDraggable = false) {
-            const className = type === 'building' ? 'circle-building' : 'circle-sign';
+        // แก้ไขฟังก์ชัน createCircleMarker
+        function createCircleMarker(latlng, type, isDraggable = false, checkStatus = null) {
+            // ✅ กำหนดรูปร่างตามสถานะการตรวจสอบ
+            let shapeClass = 'circle-round'; // ค่าเริ่มต้น: วงกลม
+            let colorClass = '';
+            
+            if (type === 'building') {
+                colorClass = 'circle-building'; // ส้ม
+            } else {
+                colorClass = 'circle-sign'; // เขียว
+            }
+            
+            // ✅ ตรวจสอบสถานะและกำหนดรูปร่าง
+            if (checkStatus === 'ถ่ายรูปแล้ว') {
+                shapeClass = 'circle-square'; // สี่เหลี่ยม
+            } else if (checkStatus === 'ตรวจสอบแล้ว') {
+                // ใช้รูปหมุดสำหรับสถานะตรวจสอบแล้ว
+                return createPinMarker(latlng, type, isDraggable);
+            }
             
             const icon = L.divIcon({
-                className: `circle-marker ${className}`,
+                className: `circle-marker ${colorClass} ${shapeClass}`,
                 iconSize: [14, 14],
                 iconAnchor: [7, 7]
             });
             
             const marker = L.marker(latlng, {
                 icon: icon,
-                draggable: isDraggable, // ✅ ตั้งค่าตอนสร้าง
+                draggable: isDraggable,
                 zIndexOffset: 1000
             });
             
-            // ✅ ลบการผูกคลิกออกทั้งหมด - Leaflet จะจัดการอัตโนมัติเมื่อใช้ bindPopup
+            return marker;
+        }
+
+        // ✅ ฟังก์ชันสร้างรูปหมุด (คล้ายกูเกิ้ลมาร์กเกอร์)
+        function createPinMarker(latlng, type, isDraggable = false) {
+            const color = type === 'building' ? '#f97316' : '#22c55e';
             
-            // ✅ ผูกเหตุการณ์ลากเฉพาะเมื่อเป็นโหมดแก้ไข
-            if (isDraggable) {
-                marker.on('dragstart', function(e) {
-                    if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
-                    if (marker.getPopup()) marker.closePopup();
-                });
-                
-                marker.on('dragend', async function(e) {
-                    const newLatLng = e.target.getLatLng();
-                    const data = e.target._popupData;
-                    if (data && typeof updateMarkerPosition === 'function') {
-                        await updateMarkerPosition(e.target, data, newLatLng);
-                    }
-                });
-            }
+            // ✅ เพิ่ม stroke="white" stroke-width="2" ในตัวเอง SVG
+            const svg = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="${color}" stroke="white" stroke-width="2" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+                </svg>
+            `;
+            
+            const icon = L.divIcon({
+                className: 'pin-marker',
+                html: svg,
+                iconSize: [24, 24],
+                iconAnchor: [12, 24],
+                popupAnchor: [0, -24]
+            });
+            
+            const marker = L.marker(latlng, {
+                icon: icon,
+                draggable: isDraggable,
+                zIndexOffset: 2000
+            });
             
             return marker;
         }
@@ -5675,7 +5717,7 @@
                     return; // ข้ามการสร้างจุดจริง
                 }
                 
-                const m = createCircleMarker(latLng, 'building', isEditMode);
+                const m = createCircleMarker(latLng, 'building', isEditMode, r.check);
                 setupMarkerPopup(m, r, 'building');
                 if (markerCluster) {
                     markerCluster.addLayer(m);
@@ -5697,7 +5739,7 @@
                     return;
                 }
                 
-                const m = createCircleMarker(latLng, 'sign', isEditMode);
+                const m = createCircleMarker(latLng, 'sign', isEditMode, r.check);
                 setupMarkerPopup(m, r, 'sign');
                 if (markerCluster) {
                     markerCluster.addLayer(m);

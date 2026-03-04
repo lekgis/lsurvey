@@ -1635,13 +1635,90 @@
             }
           });
 
-          // ✅ เมื่อแอปติดตั้งสำเร็จ
-          window.addEventListener('appinstalled', () => {
+        // ✅ เมื่อแอปติดตั้งสำเร็จ - เปิดแอปอัตโนมัติ
+        window.addEventListener('appinstalled', () => {
             console.log('🚀 PWA installed!');
+            
+            // ซ่อนปุ่มติดตั้ง
             if (installContainer) installContainer.style.display = 'none';
             if (installCloseBtn) installCloseBtn.classList.add('hidden');
-            showNotificationLeft('🎉 แอป "โนนไทย" ติดตั้งเรียบร้อยแล้ว!', 'success');
-          });
+            
+            // ✅ แสดง modal คำแนะนำการเปิดแอป
+            setTimeout(() => {
+                showPostInstallModal();
+            }, 500);
+        });
+
+        // ✅ ฟังก์ชันแสดง modal หลังติดตั้งสำเร็จ
+        function showPostInstallModal() {
+            // ลบ modal เก่าถ้ามี
+            document.getElementById('post-install-modal')?.remove();
+            
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            const isAndroid = /Android/.test(navigator.userAgent);
+            
+            // ข้อความแนะนำตามอุปกรณ์
+            let title = '🎉 ติดตั้งแอปสำเร็จ!';
+            let message = '';
+            let buttonText = 'เปิดแอปเลย';
+            
+            if (isIOS) {
+                message = 'แอป "โนนไทย" ถูกเพิ่มลงในหน้าจอโฮมแล้ว\n\n👉 กดปุ่มด้านล่างเพื่อเปิดแอปในโหมดเต็มจอ';
+            } else if (isAndroid) {
+                message = 'แอป "โนนไทย" ติดตั้งเรียบร้อยแล้ว!\n\n👉 กดปุ่มด้านล่างเพื่อเปิดแอปในโหมดเต็มจอ';
+            } else {
+                message = 'แอป "โนนไทย" ติดตั้งเป็นแอป Desktop แล้ว!\n\n👉 กดปุ่มด้านล่างเพื่อเริ่มใช้งาน';
+            }
+            
+            const modal = document.createElement('div');
+            modal.id = 'post-install-modal';
+            modal.className = 'fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4 animate-fade-in';
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl transform transition-all scale-100">
+                    <div class="text-6xl mb-4 animate-bounce">🚀</div>
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">${title}</h3>
+                    <p class="text-gray-600 text-sm mb-6 whitespace-pre-line leading-relaxed">${message}</p>
+                    
+                    <button id="open-app-now-btn" 
+                            class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-bold text-base hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                        <i data-lucide="play" class="w-5 h-5"></i>
+                        ${buttonText}
+                    </button>
+                    
+                    <button onclick="document.getElementById('post-install-modal')?.remove()" 
+                            class="mt-3 text-gray-400 text-xs hover:text-gray-600 transition">
+                        ปิด
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // ✅ สร้าง icons ใหม่สำหรับ modal
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            
+            // ✅ ปุ่ม "เปิดแอปเลย" - รีเฟรชหน้าเพื่อเข้าสู่โหมด standalone
+            document.getElementById('open-app-now-btn')?.addEventListener('click', () => {
+                modal.remove();
+                
+                // ✅ รีเฟรชหน้า - เบราว์เซอร์จะโหลดแอปในโหมดใหม่
+                // ถ้าติดตั้งสำเร็จ จะเข้าสู่โหมด standalone อัตโนมัติ
+                window.location.reload();
+                
+                // ✅ แสดง toast ยืนยัน
+                setTimeout(() => {
+                    showNotificationLeft('✅ กำลังเปิดแอปในโหมดเต็มจอ...', 'success');
+                }, 300);
+            });
+            
+            // ✅ ปิด modal เมื่อคลิกพื้นหลัง
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
         }
 
         // ✅ ปุ่มปิดคำแนะนำการติดตั้ง (สำหรับผู้ใช้ที่ต้องการซ่อน)
@@ -5541,6 +5618,23 @@
                 });
             });
             
+        // ✅ ตรวจสอบโหมดการแสดงผลเมื่อโหลดหน้า
+        document.addEventListener('DOMContentLoaded', () => {
+            // ✅ ถ้าเปิดในโหมด standalone → ปรับ UI เล็กน้อย
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                console.log('🚀 Running in standalone mode');
+                
+                // ✅ ซ่อน elements ที่ไม่จำเป็นในโหมดแอป
+                const pwaInstallContainer = document.getElementById('pwa-install-container');
+                if (pwaInstallContainer) {
+                    pwaInstallContainer.style.display = 'none';
+                }
+                
+                // ✅ เพิ่ม class ที่ body สำหรับสไตล์เฉพาะโหมดแอป
+                document.body.classList.add('standalone-mode');
+            }
+        });
+
             // ผูกเหตุการณ์กับหัวตารางป้าย
             document.querySelectorAll('#sign-table .sortable-header').forEach(header => {
                 header.style.cursor = 'pointer';

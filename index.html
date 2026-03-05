@@ -1168,11 +1168,14 @@
         </button>
     </div>
 
-    <!-- ปุ่มตำแหน่งปัจจุบัน -->
+    <!-- ✅ ปุ่มตำแหน่งปัจจุบัน -->
     <div class="absolute bottom-4 left-4 z-[1001]">
-    <button onclick="locateUser()" class="map-btn p-3 shadow-lg border-2 border-blue-100">
-    <div class="user-location-dot"></div>
-    </button>
+        <button onclick="zoomToCurrentLocation()" 
+                class="map-btn p-3 shadow-lg border-2 border-blue-100" 
+                id="locationBtn"
+                title="ซูมไปยังตำแหน่งฉัน">
+            <div class="user-location-dot"></div>
+        </button>
     </div>
 
     <!-- แก้ไขส่วน HTML ของ coord-display -->
@@ -9496,21 +9499,19 @@
 
 
         // ============================================
-        // ✅ ฟังก์ชันสร้าง/อัปเดตจุดตำแหน่ง (วงกลม)
+        // ✅ ฟังก์ชันสร้าง/อัปเดตจุดตำแหน่ง
         // ============================================
         function updateUserLocationMarker(latlng) {
             if (!userLocationMarker) {
-                // ✅ สร้าง DIV สำหรับจุดวงกลม + วงพัลส์
                 const dotEl = document.createElement('div');
-                dotEl.className = 'user-location-dot';  // ✅ ใช้ class นี้เท่านั้น
+                dotEl.className = 'user-location-dot';
                 
-                // ✅ สร้าง Marker ด้วย divIcon (ไม่ใช่ marker ปกติ!)
                 userLocationMarker = L.marker(latlng, {
                     icon: L.divIcon({
-                        className: '',           // ✅ ว่างไว้! ไม่ให้ Leaflet เพิ่ม class อื่น
-                        html: dotEl,             // ✅ ใส่ HTML ของเราเข้าไป
-                        iconSize: [14, 14],      // ✅ ขนาดจุด
-                        iconAnchor: [7, 7]       // ✅ จุดกึ่งกลาง
+                        className: '',
+                        html: dotEl,
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
                     }),
                     zIndexOffset: 1000,
                     interactive: false
@@ -9522,17 +9523,15 @@
         }
 
         // ============================================
-        // ✅ ฟังก์ชันเริ่มติดตามตำแหน่ง
+        // ✅ ฟังก์ชันเริ่มติดตามตำแหน่ง (อัตโนมัติ)
         // ============================================
         function startLocationTracking() {
             if (!navigator.geolocation) {
-                showNotificationLeft('❌ เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง', 'error');
+                console.warn('⚠️ เบราว์เซอร์ไม่รองรับการระบุตำแหน่ง');
                 return;
             }
             
             isTrackingLocation = true;
-            const locationBtn = document.querySelector('.btn-location');
-            if (locationBtn) locationBtn.classList.add('active');
             
             const options = {
                 enableHighAccuracy: true,
@@ -9542,16 +9541,13 @@
             
             watchId = navigator.geolocation.watchPosition(
                 (position) => {
-                    const { latitude, longitude } = position.coords;
+                    const { latitude, longitude, accuracy } = position.coords;
                     const latlng = L.latLng(latitude, longitude);
                     
-                    // ✅ อัปเดตจุดตำแหน่ง
                     updateUserLocationMarker(latlng);
-                    
-                    // ✅ บันทึกตำแหน่งล่าสุด
                     lastKnownPosition = latlng;
                     
-                    // ✅ ซูมไปที่ตำแหน่งครั้งแรก (ใช้ flyTo ให้ลื่น)
+                    // ✅ ซูมไปตำแหน่งครั้งแรกเท่านั้น
                     if (!userLocationMarker._initialZoomed) {
                         map.flyTo(latlng, 19, {
                             duration: 1.2,
@@ -9564,27 +9560,13 @@
                     // ✅ อัปเดตพิกัดใน UI (ถ้ามี)
                     const coordDisplay = document.getElementById('coord-display');
                     if (coordDisplay) {
-                    coordDisplay.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-                    coordDisplay.classList.remove('hidden');
+                        coordDisplay.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                        coordDisplay.classList.remove('hidden');
                     }
-
                 },
                 (error) => {
                     console.warn('Geolocation error:', error.message);
-                    let message = 'ไม่สามารถระบุตำแหน่งได้';
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            message = '❌ กรุณาอนุญาตการเข้าถึงตำแหน่ง';
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            message = '❌ สัญญาณ GPS ไม่พร้อมใช้งาน';
-                            break;
-                        case error.TIMEOUT:
-                            message = '❌ การขอตำแหน่งหมดเวลา';
-                            break;
-                    }
-                    showNotificationLeft(message, 'error');
-                    stopLocationTracking();
+                    // ✅ ไม่แสดง alert เพื่อไม่รบกวนผู้ใช้
                 },
                 options
             );
@@ -9595,23 +9577,90 @@
         // ============================================
         function stopLocationTracking() {
             isTrackingLocation = false;
-            const locationBtn = document.querySelector('.btn-location');
-            if (locationBtn) locationBtn.classList.remove('active');
-            
             if (watchId !== null) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
-            
-            // ✅ ทำให้จุดจางลงเพื่อแสดงว่าไม่ติดตามแล้ว (แต่ยังแสดงตำแหน่งล่าสุด)
-            if (userLocationMarker) {
-                const dot = userLocationMarker.getElement()?.querySelector('.user-location-dot');
-                if (dot) {
-                    dot.style.opacity = '0.6';
-                    dot.style.animation = 'none';
+            // ✅ ไม่ซ่อน marker เพื่อให้ผู้ใช้เห็นตำแหน่งสุดท้าย
+        }
+
+        // ============================================
+        // ✅ ฟังก์ชันซูมไปยังตำแหน่งปัจจุบัน (ปุ่มกด)
+        // ============================================
+        function zoomToCurrentLocation() {
+            if (lastKnownPosition) {
+                map.flyTo(lastKnownPosition, 19, {
+                    duration: 1.2,
+                    easeLinearity: 0.3
+                });
+                showNotificationLeft('🔍 ซูมไปยังตำแหน่งปัจจุบัน', 'info');
+            } else if (userLocationMarker?.getLatLng()) {
+                map.flyTo(userLocationMarker.getLatLng(), 19, {
+                    duration: 1.2,
+                    easeLinearity: 0.3
+                });
+            } else {
+                // ✅ ถ้ายังไม่มีตำแหน่ง → ขอตำแหน่งครั้งเดียว
+                if (navigator.geolocation) {
+                    showNotificationLeft('📡 กำลังระบุตำแหน่ง...', 'info');
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const { latitude, longitude } = position.coords;
+                            const latlng = L.latLng(latitude, longitude);
+                            map.flyTo(latlng, 19, { duration: 1.2 });
+                            lastKnownPosition = latlng;
+                            updateUserLocationMarker(latlng);
+                            showNotificationLeft('✅ ระบุตำแหน่งสำเร็จ', 'success');
+                        },
+                        () => {
+                            showNotificationLeft('❌ ไม่สามารถระบุตำแหน่งได้', 'error');
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                    );
                 }
             }
         }
+
+        // ============================================
+        // ✅ เริ่มติดตามตำแหน่งอัตโนมัติเมื่อโหลดหน้าเว็บ
+        // ============================================
+        function initAutoLocationTracking() {
+            if (!userLocationMarker) {
+                // รอให้ map พร้อมก่อน
+                if (typeof map !== 'undefined' && map) {
+                    updateUserLocationMarker(map.getCenter());
+                    startLocationTracking();
+                    console.log('✅ เริ่มติดตามตำแหน่งอัตโนมัติ');
+                } else {
+                    setTimeout(initAutoLocationTracking, 500);
+                }
+            }
+        }
+
+        // ============================================
+        // ✅ จัดการเมื่อแอปถูกพัก/กลับมา (Page Visibility API)
+        // ============================================
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // ✅ แอปถูกพัก/หน้าจอปิด → หยุดติดตามเพื่อประหยัดแบตเตอรี่
+                stopLocationTracking();
+                console.log('⏸️ หยุดติดตามตำแหน่ง (แอปถูกพัก)');
+            } else {
+                // ✅ แอปกลับมาทำงาน → เริ่มติดตามใหม่
+                if (!isTrackingLocation) {
+                    startLocationTracking();
+                    console.log('▶️ เริ่มติดตามตำแหน่งใหม่ (แอปกลับมา)');
+                }
+            }
+        });
+
+        // ============================================
+        // ✅ จัดการเมื่อปิดแอป/รีเฟรชหน้า
+        // ============================================
+        window.addEventListener('beforeunload', () => {
+            stopLocationTracking();
+            console.log('🛑 หยุดติดตามตำแหน่ง (ปิดแอป/รีเฟรช)');
+        });
 
         // ============================================
         // ✅ ฟังก์ชันหลัก: กดปุ่มตำแหน่งปัจจุบัน

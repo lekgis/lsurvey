@@ -40,6 +40,18 @@
             -webkit-user-select: none;
         }
 
+        .table-tab {
+            transition: all 0.2s ease-in-out;
+        }
+        .table-tab.active {
+            animation: pulse-red 0.3s ease-out;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
         /* ข้อ 1: ปรับแต่งเป้าเล็งใหม่ (ใหญ่ขึ้น 20%, หนาขึ้น, สูงขึ้น 15%) */
         .crosshair {
             position: absolute;
@@ -894,6 +906,25 @@
             transition: all 0.3s ease;
         }
         
+        /* ✅ สไตล์สำหรับแท็บที่แอคทีฟ - ทำให้เห็นชัดเจนว่ากำลังกรอง */
+        .table-tab.active {
+            background: white !important;
+            color: #dc2626 !important;  /* 🔴 สีแดงสำหรับโหมดรหัสซ้ำ */
+            font-weight: 700 !important;
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2) !important;
+            border: 2px solid #dc2626 !important;
+        }
+
+        /* ✅ สไตล์สำหรับ badge รหัสซ้ำ */
+        #duplicate-count-badge {
+            transition: all 0.2s ease;
+        }
+
+        .table-tab.active #duplicate-count-badge {
+            background-color: #dc2626 !important;
+            transform: scale(1.1);
+        }
+
         /* สไตล์สำหรับตาราง */
         .data-table-panel {
             position: fixed;
@@ -1234,7 +1265,11 @@
                         <span>ป้าย</span>
                         <span id="sign-count-badge" class="ml-2 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium">0</span>
                     </div>
-                    <div class="table-tab" onclick="toggleDuplicateFilter()" id="duplicate-filter-tab">
+                    <!-- ✅ ปุ่มรหัสซ้ำ - เพิ่ม id และโครงสร้างที่ชัดเจน -->
+                    <div class="table-tab" 
+                         id="duplicate-filter-tab" 
+                         onclick="toggleDuplicateFilter()"
+                         title="คลิกเพื่อแสดง/ซ่อนเฉพาะรายการที่มีรหัสซ้ำ">
                         <span>รหัสซ้ำ</span>
                         <span id="duplicate-count-badge" class="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-medium">0</span>
                     </div>
@@ -4493,32 +4528,34 @@
             }, 1000);  // ✅ รอเล็กน้อยให้ modal ปิดสนิทก่อน
         }
 
-        // ✅ ฟังก์ชันสลับกรองรหัสซ้ำ
+        // ✅ ฟังก์ชันสลับกรองรหัสซ้ำ (แก้ไขแล้ว - ไม่กวนแท็บอื่น)
         function toggleDuplicateFilter() {
             showDuplicateOnly = !showDuplicateOnly;
             
-            // ✅ อัปเดตสไตล์ปุ่ม
             const duplicateTab = document.getElementById('duplicate-filter-tab');
+            
             if (duplicateTab) {
                 if (showDuplicateOnly) {
+                    // ✅ เปิดโหมดรหัสซ้ำ: แอคทีฟเฉพาะปุ่มนี้
                     duplicateTab.classList.add('active');
-                    document.querySelectorAll('.table-tab').forEach(tab => {
-                        if (tab.id !== 'duplicate-filter-tab' && tab.id !== 'import-tab') {
-                            tab.classList.remove('active');
-                        }
-                    });
+                    // ❌ ไม่ต้องไปยุ่งกับปุ่มอื่น ปล่อยให้ switchTableTab() จัดการเอง
                 } else {
+                    // ✅ ปิดโหมด: เอา active ออกจากปุ่มรหัสซ้ำเท่านั้น
                     duplicateTab.classList.remove('active');
+                    // ❌ ไม่ต้องไปเปิดแท็บอื่นเอง ปล่อยให้ผู้ใช้เลือกแท็บที่ต้องการ
                 }
             }
             
-            // ✅ เรนเดอร์ตารางใหม่
+            // ✅ เรนเดอร์ตารางใหม่ตามสถานะกรอง
             renderBuildingTable();
             renderSignTable();
-            updateDuplicateCount();  // ✅ เพิ่มบรรทัดนี้
-
+            
+            // ✅ อัปเดตจำนวนรหัสซ้ำที่ badge
+            updateDuplicateCount();
+            
+            // ✅ แสดงแจ้งเตือนสถานะ
             showNotificationLeft(
-                showDuplicateOnly ? 'แสดงเฉพาะรายการรหัสซ้ำ' : 'แสดงรายการทั้งหมด',
+                showDuplicateOnly ? '🔍 แสดงเฉพาะรายการรหัสซ้ำ' : '📋 แสดงรายการทั้งหมด',
                 'info'
             );
         }
@@ -4529,12 +4566,19 @@
             // ✅ รอเงื่อนไขเพิ่มเติมจากผู้ใช้
         }
 
-        // ✅ อัปเดตจำนวนรหัสซ้ำที่ badge
+        // ✅ อัปเดตจำนวนรหัสซ้ำที่แสดงบน badge
         function updateDuplicateCount() {
             const badge = document.getElementById('duplicate-count-badge');
             if (badge) {
                 const totalDuplicates = duplicateBuildingCodes.length + duplicateSignCodes.length;
                 badge.textContent = totalDuplicates > 99 ? '99+' : totalDuplicates;
+                
+                // ✅ ซ่อน badge ถ้าไม่มีรหัสซ้ำ
+                if (totalDuplicates === 0) {
+                    badge.classList.add('hidden');
+                } else {
+                    badge.classList.remove('hidden');
+                }
             }
         }
 

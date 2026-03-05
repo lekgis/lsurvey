@@ -52,6 +52,21 @@
             100% { transform: scale(1); }
         }
 
+        /* ✅ สไตล์สำหรับแท็บที่แอคทีฟ */
+        .table-tab.active {
+            background: white !important;
+            color: #667eea !important;  /* สีเดิมของแท็บเนื้อหา */
+            font-weight: 700 !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        }
+
+        /* ✅ สไตล์เฉพาะสำหรับปุ่มรหัสซ้ำเมื่อ active (อาจจะเป็นสีแดงเพื่อให้เด่น) */
+        #duplicate-filter-tab.active {
+            background: white !important;
+            color: #dc2626 !important;  /* 🔴 สีแดงสำหรับโหมดรหัสซ้ำ */
+            border: 2px solid #dc2626 !important; /* เพิ่มขอบสีแดงให้เห็นชัด */
+        }
+
         /* ข้อ 1: ปรับแต่งเป้าเล็งใหม่ (ใหญ่ขึ้น 20%, หนาขึ้น, สูงขึ้น 15%) */
         .crosshair {
             position: absolute;
@@ -4528,25 +4543,32 @@
             }, 1000);  // ✅ รอเล็กน้อยให้ modal ปิดสนิทก่อน
         }
 
-        // ✅ ฟังก์ชันสลับกรองรหัสซ้ำ (แก้ไขแล้ว - ไม่กวนแท็บอื่น)
+        // ✅ ฟังก์ชันสลับกรองรหัสซ้ำ (แก้ไขแล้ว)
         function toggleDuplicateFilter() {
             showDuplicateOnly = !showDuplicateOnly;
             
+            // ✅ อัปเดตสไตล์ปุ่ม
             const duplicateTab = document.getElementById('duplicate-filter-tab');
+            const allTabs = document.querySelectorAll('.table-tab');
             
             if (duplicateTab) {
                 if (showDuplicateOnly) {
-                    // ✅ เปิดโหมดรหัสซ้ำ: แอคทีฟเฉพาะปุ่มนี้
+                    // ✅ เปิดโหมด: แอคทีฟปุ่มนี้
                     duplicateTab.classList.add('active');
-                    // ❌ ไม่ต้องไปยุ่งกับปุ่มอื่น ปล่อยให้ switchTableTab() จัดการเอง
+                    // ❌ ไม่ต้องไปลบ active จากปุ่มสิ่งปลูกสร้าง/ป้าย ตรงนี้
+                    // ให้ปล่อยให้ switchTableTab จัดการเมื่อผู้ใช้กดเปลี่ยนแท็บ
                 } else {
-                    // ✅ ปิดโหมด: เอา active ออกจากปุ่มรหัสซ้ำเท่านั้น
+                    // ✅ ปิดโหมด: เอา active ออกจากปุ่มรหัสซ้ำ
                     duplicateTab.classList.remove('active');
-                    // ❌ ไม่ต้องไปเปิดแท็บอื่นเอง ปล่อยให้ผู้ใช้เลือกแท็บที่ต้องการ
+                    // ถ้าปิดกรอง อาจจะต้องการให้กลับไปที่แท็บเริ่มต้น (สิ่งปลูกสร้าง)
+                    const buildingTab = document.querySelector('.table-tab[onclick*="building"]');
+                    if (buildingTab && !buildingTab.classList.contains('active')) {
+                         // ไม่จำเป็นต้องกดจำลอง event แค่ให้แน่ใจว่าแท็บเนื้อหาถูกต้อง
+                    }
                 }
             }
             
-            // ✅ เรนเดอร์ตารางใหม่ตามสถานะกรอง
+            // ✅ เรนเดอร์ตารางใหม่ตามสถานะ
             renderBuildingTable();
             renderSignTable();
             
@@ -4610,17 +4632,27 @@
             triggerAutoRefresh();
         }
 
-        // ฟังก์ชันสลับแท็บตาราง
+        // ✅ ฟังก์ชันสลับแท็บตาราง (แก้ไขแล้ว)
         function switchTableTab(type) {
             // เปลี่ยนแท็บ
             document.querySelectorAll('.table-tab').forEach(tab => {
+                // ✅ แก้ไขตรงนี้: ถ้ากำลังกรองรหัสซ้ำอยู่ (showDuplicateOnly = true)
+                // ให้ข้ามปุ่ม 'duplicate-filter-tab' อย่าลบ active ออกจากมัน
+                if (showDuplicateOnly && tab.id === 'duplicate-filter-tab') {
+                    return; 
+                }
                 tab.classList.remove('active');
             });
+            
+            // เพิ่ม active ให้ปุ่มที่กด
             event.target.classList.add('active');
             
             // แสดงตารางที่เลือก
             document.getElementById('building-table-container').classList.toggle('hidden', type !== 'building');
             document.getElementById('sign-table-container').classList.toggle('hidden', type !== 'sign');
+            
+            // ✅ กดรีโหลดอัตโนมัติ (ถ้ามีฟังก์ชันนี้)
+            // triggerAutoRefresh(); 
         }
 
         // ฟังก์ชันซูมไปที่ตำแหน่ง

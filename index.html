@@ -2407,7 +2407,7 @@
         }
 
         // ============================================
-        // ฟังก์ชันบันทึกข้อมูล (แก้ไขส่วนจัดการรูปภาพ - แยกเก็บลิ้งค์และชื่อไฟล์)
+        // ฟังก์ชันบันทึกข้อมูล (แก้ไขแล้ว - รองรับลิ้งค์รูปและวันที่)
         // ============================================
         async function saveSurveyData() {
             const form = document.getElementById('survey-form');
@@ -2419,10 +2419,8 @@
             // ✅ รวบรวมข้อมูลจากฟอร์ม (ไม่รวมฟิลด์ไฟล์)
             const formData = new FormData(form);
             const data = {};
-
             for (let [key, value] of formData.entries()) {
                 if (key.endsWith('_temp')) continue; // ข้ามฟิลด์ชั่วคราว
-                
                 const input = form.querySelector(`[name="${key}"]`);
                 if (input && input.type === 'checkbox') {
                     data[key] = input.checked ? 'TRUE' : 'FALSE';
@@ -2430,92 +2428,78 @@
                     data[key] = value.trim();
                 }
             }
-
-            // ✅ เพิ่มค่าฟิลด์ที่ถูกปิดการใช้งาน (เฉพาะสิ่งปลูกสร้าง) - แก้ไขปัญหาค่าว่างไม่ถูกส่ง
-            if (form.querySelector('[name="b_use2"]')) { // ตรวจสอบว่าเป็นฟอร์มสิ่งปลูกสร้าง
+            
+            // ✅ เพิ่มค่าฟิลด์ที่ถูกปิดการใช้งาน (เฉพาะสิ่งปลูกสร้าง)
+            if (form.querySelector('[name="b_use2"]')) {
                 const disabledFields = [
                     'b_use2', 'per_use2', 'buse_floor2', 'buse_area2', 'ment_use2', 'full_area2',
-                    'land_use' // เพิ่ม land_use ด้วย (แม้จะคำนวณอัตโนมัติ แต่ต้องส่งค่า)
+                    'land_use'
                 ];
-                
                 disabledFields.forEach(fieldId => {
                     const field = form.querySelector(`[name="${fieldId}"]`);
                     if (field) {
-                        // ดึงค่าจากฟิลด์แม้ถูกปิดการใช้งาน + trim ค่าว่าง
                         const rawValue = field.value || '';
                         data[fieldId] = rawValue.trim();
-                        console.log(`📤 เพิ่มค่า ${fieldId} (disabled) ใน payload: "${data[fieldId]}"`);
                     }
                 });
             }
-
-            // ✅ คำนวณค่า "ใช้ประโยชน์ที่ดิน" ใหม่ทุกครั้งก่อนบันทึก (ไม่พึ่งพาค่าใน UI)
+            
+            // ✅ คำนวณค่า "ใช้ประโยชน์ที่ดิน" ใหม่ทุกครั้งก่อนบันทึก
             const bUseField = form.querySelector('select[name="b_use"]');
             const bUse2Field = form.querySelector('select[name="b_use2"]');
             let computedLandUse = '';
-
             if (bUseField && bUse2Field) {
                 const bUseValue = (bUseField.value || '').trim();
                 const bUse2Value = (bUse2Field.value || '').trim();
-                
-                // คำนวณตามเงื่อนไขเดิม
                 if (bUseValue && bUse2Value) {
-                    computedLandUse = '5-ใช้ประโยชน์หลายประเภท'; // ทั้งสองช่องมีค่า
+                    computedLandUse = '5-ใช้ประโยชน์หลายประเภท';
                 } else if (bUseValue) {
-                    computedLandUse = bUseValue; // มีค่าจาก b_use เท่านั้น
+                    computedLandUse = bUseValue;
                 } else if (bUse2Value) {
-                    computedLandUse = bUse2Value; // มีค่าจาก b_use2 เท่านั้น
+                    computedLandUse = bUse2Value;
                 }
-                // ถ้าทั้งสองว่าง → ค่าว่าง (ไม่ต้องทำอะไร)
             }
-
-            // ✅ ตั้งค่าในข้อมูลที่จะส่ง (แทนที่ค่าเดิมหรือเพิ่มใหม่)
             data.land_use = computedLandUse;
-            console.log('✅ คำนวณค่า land_use ใหม่ก่อนบันทึก:', data.land_use || '(ว่าง)');
-
-            // ✅ ดึงพิกัดจากหลายแหล่ง (สำคัญที่สุด!)
+            
+            // ✅ ✅ ✅ เพิ่มฟิลด์วันที่ (แก้ไขข้อ 2) ✅ ✅ ✅
+            const now = new Date().toISOString();
+            if (editingMarker && editingMarker._popupData) {
+                // ✅ กรณีอัปเดต: ใช้ date_added เดิม + update ใหม่
+                data.date_added = editingMarker._popupData.date_added || now;
+                data.update = now;
+                console.log(`📝 อัปเดตข้อมูล: date_added=${data.date_added}, update=${data.update}`);
+            } else {
+                // ✅ กรณีเพิ่มใหม่: date_added = update = ปัจจุบัน
+                data.date_added = now;
+                data.update = now;
+                console.log(`📝 เพิ่มข้อมูลใหม่: date_added=${data.date_added}, update=${data.update}`);
+            }
+            
+            // ✅ ดึงพิกัดจากหลายแหล่ง
             let latLongValue = '';
-
-            // ลองดึงจากฟิลด์ซ่อนในฟอร์มก่อน (สำคัญที่สุด!)
             const latLongInput = form.querySelector('input[name="lat_long"]');
             if (latLongInput && latLongInput.value.trim() !== '') {
                 latLongValue = latLongInput.value.trim();
-                console.log('📍 พิกัดจากฟิลด์ซ่อน:', latLongValue);
             }
-
-            // ถ้าไม่มีในฟิลด์ซ่อน ให้ลองดึงจาก #latlng-display
             if (!latLongValue) {
                 const latlngDisplay = document.getElementById('latlng-display')?.innerText;
                 if (latlngDisplay && latlngDisplay.trim() !== '' && latlngDisplay !== 'กำลังโหลด...') {
                     latLongValue = latlngDisplay.trim();
-                    console.log('📍 พิกัดจาก #latlng-display:', latLongValue);
                 }
             }
-
-            // ถ้ายังไม่มี ให้ดึงจากมาร์กเกอร์ที่กำลังแก้ไข
             if (!latLongValue && editingMarker && editingMarker._popupData) {
                 latLongValue = editingMarker._popupData.lat_long || '';
-                console.log('📍 พิกัดจาก _popupData:', latLongValue);
             }
-
-            // ตรวจสอบว่าได้พิกัดหรือไม่
             if (!latLongValue || latLongValue.trim() === '') {
                 showNotificationLeft('❌ ไม่พบพิกัดตำแหน่ง กรุณาตรวจสอบอีกครั้ง', 'error');
-                console.error('❌ ไม่พบพิกัดในทุกแหล่งที่พยายามดึง');
-                console.log('- ฟิลด์ซ่อน:', latLongInput?.value);
-                console.log('- #latlng-display:', document.getElementById('latlng-display')?.innerText);
-                console.log('- editingMarker._popupData:', editingMarker?._popupData);
                 return;
             }
-
             data.lat_long = latLongValue;
-            console.log('✅ ใช้พิกัด:', data.lat_long);
             
             // ✅ ตรวจสอบประเภทและกำหนดรหัสอัตโนมัติ
             let markerType;
             let rowKey = null;
             let action = 'add';
-            
             if (editingMarker && editingMarker._popupData) {
                 markerType = editingMarker._popupData.type || (editingMarker._popupData.building_c ? 'building' : 'sign');
                 rowKey = editingMarker._popupData.id || editingMarker._popupData._row_num;
@@ -2524,34 +2508,28 @@
                 markerType = document.getElementById('marker-type')?.value || 'building';
                 action = 'add';
             }
-            
             if (!markerType || !['building', 'sign'].includes(markerType)) {
                 showNotificationLeft('ไม่พบประเภทข้อมูล', 'error');
                 return;
             }
-
-            // ============================================
-            // ✅ กำหนดรหัสอัตโนมัติถ้าไม่มี (สำคัญมาก!)
-            // ============================================
-            // ✅ ก่อนสร้างคิว: รวมรหัสจากฟิลด์ชั่วคราว (สำคัญ!)
+            
+            // ✅ กำหนดรหัสอัตโนมัติถ้าไม่มี
             if (markerType === 'building') {
                 const parcelTemp = form.querySelector('input[name="parcel_cod_temp"]')?.value?.trim();
                 const bcodeTemp = form.querySelector('input[name="bcode_temp"], select[name="bcode_temp"]')?.value?.trim();
                 if (parcelTemp && bcodeTemp) {
-                    data.building_c = `${parcelTemp}-${bcodeTemp}`;  // ✅ เช่น 12K042-B001
-                    console.log(`✅ สร้าง building_c: ${data.building_c}`);
+                    data.building_c = `${parcelTemp}-${bcodeTemp}`;
                 }
             } else if (markerType === 'sign') {
                 const parcelTemp = form.querySelector('input[name="parcel_cod_temp"]')?.value?.trim();
                 const scodeTemp = form.querySelector('input[name="scode_temp"], select[name="scode_temp"]')?.value?.trim();
                 if (parcelTemp && scodeTemp) {
-                    data.s_code = `${parcelTemp}-${scodeTemp}`;  // ✅ เช่น 12K042-S001
-                    console.log(`✅ สร้าง s_code: ${data.s_code}`);
+                    data.s_code = `${parcelTemp}-${scodeTemp}`;
                 }
             }
-
+            
             // ============================================
-            // ✅ จัดการรูปภาพ: เฉพาะเมื่อมีการเลือกไฟล์ใหม่เท่านั้น
+            // ✅ ✅ ✅ จัดการรูปภาพ (แก้ไขข้อ 1) ✅ ✅ ✅
             // ============================================
             let imageBase64 = null;
             let fileNameParam = null;
@@ -2559,50 +2537,41 @@
             
             // ✅ ตรวจสอบว่ามีการเลือกไฟล์ใหม่หรือไม่
             if (fileInput && fileInput.files[0]) {
-
-                // ✅ ===== START: เปลี่ยนชื่อไฟล์รูปเดิมก่อนอัปโหลดรูปใหม่ =====
+                // เปลี่ยนชื่อไฟล์รูปเดิมก่อนอัปโหลดรูปใหม่
                 if (editingMarker && editingMarker._popupData) {
                     const oldPicture = editingMarker._popupData.picture;
                     if (oldPicture && oldPicture.trim() !== '' && oldPicture !== 'image.jpg') {
                         const folderType = markerType === 'building' ? 'buildings' : 'signs';
-                        // เรียกเปลี่ยนชื่อแบบไม่บล็อก (fire-and-forget) เพื่อไม่ให้ช้า
                         renameOldImageInDrive(oldPicture, folderType).catch(err => {
                             console.warn('เปลี่ยนชื่อไฟล์เก่าล้มเหลว แต่ดำเนินการต่อ:', err);
                         });
                     }
                 }
-                // ✅ ===== END: เปลี่ยนชื่อไฟล์รูปเดิม =====
-
+                
                 const file = fileInput.files[0];
                 const maxSize = markerType === 'building' ? 1500 : 2000;
                 
-                // ตั้งชื่อไฟล์ใหม่                
-                // ✅ ใหม่ (ตรวจสอบก่อนเติม)
+                // ตั้งชื่อไฟล์ใหม่
                 const extension = file.name.split('.').pop().toLowerCase() || 'jpg';
                 let code = data.building_c || data.s_code;
-
                 if (code) {
-                    // ✅ ถ้ามีรหัสอยู่แล้ว (เช่น 99Z000-B1320) ให้ใช้รหัสนั้นเป็นชื่อไฟล์โดยตรง
                     fileNameParam = `${code}.${extension}`;
                 } else {
-                    // ✅ กรณีไม่มีรหัสจริงๆ (กันไว้) ค่อยเติม prefix
                     const prefix = markerType === 'building' ? 'B' : 'S';
                     const tempCode = Date.now().toString().slice(-5);
                     fileNameParam = `${prefix}${tempCode}.${extension}`;
                 }
-
+                
                 // ปรับขนาดรูปภาพ
                 try {
                     const resizedImage = await resizeImage(file, maxSize, maxSize);
                     const base64Data = resizedImage.split(',')[1];
                     imageBase64 = `${file.type};base64,${base64Data}`;
                     
-                    // บันทึกลง IndexedDB
+                    // บันทึกลง IndexedDB (สำรอง)
                     await saveImageToDB(imageBase64, fileNameParam, rowKey || Date.now(), markerType);
                     console.log(`✅ รูปภาพบันทึกใน IndexedDB: ${fileNameParam}`);
                     
-                    // ✅ เก็บชื่อไฟล์ในข้อมูล (สำหรับคอลั่มน์ 'picture')
-                    data.picture = fileNameParam;
                 } catch (err) {
                     console.error('Error resizing image:', err);
                     try {
@@ -2610,36 +2579,25 @@
                         const bytes = [...new Uint8Array(arrayBuffer)];
                         const binary = bytes.map(b => String.fromCharCode(b)).join('');
                         imageBase64 = `${file.type};base64,${btoa(binary)}`;
-                        
                         await saveImageToDB(imageBase64, fileNameParam, rowKey || Date.now(), markerType);
-                        console.log(`⚠️ รูปภาพบันทึกแบบไม่ปรับขนาด: ${fileNameParam}`);
-                        data.picture = fileNameParam;
                     } catch (fallbackErr) {
                         console.error('Fallback failed:', fallbackErr);
                         showNotificationLeft('⚠️ ไม่สามารถบันทึกรูปภาพได้', 'warning');
-                        // ✅ ไม่เก็บค่า picture หากบันทึกไม่สำเร็จ
-                        delete data.picture;
                         imageBase64 = null;
                         fileNameParam = null;
                     }
                 }
-            } else {
-                // ✅ สำคัญมาก: ไม่เก็บค่า picture ในข้อมูลเมื่อไม่มีการเลือกไฟล์ใหม่
-                // เพื่อป้องกันไม่ให้เซิร์ฟเวอร์ทับค่าเดิมด้วย "image.jpg"
-                console.log('ℹ️ ไม่มีการเลือกรูปภาพใหม่ - ไม่ส่งค่า picture ไปยังเซิร์ฟเวอร์');
             }
             
-            // ✅ วางโค้ดตรวจสอบที่นี่ (หลังจากตั้งค่า data.picture และก่อนสร้างคิว)
+            // ✅ ตรวจสอบค่า picture ที่ไม่ถูกต้อง
             if (data.picture === 'image.jpg' || data.picture === '') {
                 delete data.picture;
-                console.warn('⚠️ ลบค่า picture ที่ไม่ถูกต้องออกก่อนส่ง: ', data.picture);
             }
             if (fileNameParam === 'image.jpg' || !fileNameParam || fileNameParam.trim() === '') {
                 fileNameParam = null;
                 imageBase64 = null;
-                console.warn('⚠️ ยกเลิกการส่ง fileNameParam ที่ไม่ถูกต้อง');
             }
-
+            
             // ============================================
             // ✅ สร้างคิวสำหรับอัปโหลด
             // ============================================
